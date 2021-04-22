@@ -1,32 +1,26 @@
 #!/bin/sh
 
-##################
-###  Config    ###
-##################
+#### Config ####{{{
 
+# Required
 SRC_DIR="src"
 OUT_DIR="public"
 TEMPLATE_DIR="templates"
-FRONTMATTER_TAGS="title|description|date"
-FORMAT_PRG="prettier"
-FORMAT_PRG_ARGS="--stdin-filepath $TEMPLATE_OUT_PATH --parser html"
 
-##################
-### End Config ###
-##################
+# Optional (But recomended)
+FORMAT_PRG=""
+FORMAT_PRG_ARGS=""
 
-parse_frontmatter () {
-    echo -n $(
-        sed -n '/---/,/---/p' "$1" |
-        sed '1,1d;$d' |
-        sed -e 's/:[^:\/\/]/="/g;s/$/"/g;s/ *=/=/g' |
-        grep -E "$FRONTMATTER_TAGS" |
-        sed 's/.*\[\([^]]*\)].*/\1/'
-    )
-}
+# Optional
+LOG_DEFAULT_COLOR="\033[0m"
+LOG_ERROR_COLOR="\033[1;31m"
+LOG_INFO_COLOR="\033[34m"
+LOG_SUCCESS_COLOR="\033[1;32m"
+LOG_WARN_COLOR="\033[1;33m"
 
+#}}}
 
-### parse_md {{{
+#### parse_md ####{{{
 parse_md() {
     OUT="$1"
 
@@ -187,33 +181,6 @@ parse_md() {
     # make escaped periods literal
     OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\\. /s/([1-9]+)\\. /\1\. /')
 
-
-    # code blocks
-    # OUT=$(echo -n "$OUT" | sed -nr '
-    # # if at end of file, append the current line to the hold buffer and print it
-    # ${
-    # H
-    # b code
-    # }
-    # # wrap the code block on any non code block lines
-    # /^\t| {4}/!b code
-    # # else, append to the holding buffer and do nothing
-    # H
-    # b # else, branch to the end of the script
-    # :code
-    # # exchange the hold space with the pattern space
-    # x
-    # # look for the code items, if there wrap the pre-code tags
-    # /\t| {4}/{
-    # s/(\t| {4})(.*)/<pre><code>\n\1\2\n<\/code><\/pre>/ # wrap the ending tags
-    # p
-    # b
-    # }
-    # p
-    # ')
-
-    OUT=$(echo -n "$OUT" | sed '1 d' )
-
     # convert html characters inside pre-code tags into printable representations
     OUT=$(echo -n "$OUT" | sed -r '
     # get inside pre-code tags
@@ -334,6 +301,7 @@ parse_md() {
     s/\\\-/\-/g # minus
     s/\\\\/\\/g # backslash
     ') 
+
     
     IFS=$DEFAULT_IFS
 
@@ -342,66 +310,161 @@ parse_md() {
 
 # }}}
 
-FORMAT_CMD=""
-
-[ -z "$FORMAT_PRG" ] && FORMAT_CMD="cat"
-
-[ ! -z "$FORMAT_PRG" ] && [ -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG"
-
-[ ! -z "$FORMAT_PRG" ] && [ ! -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG $FORMAT_PRG_ARGS"
+#### Build ####{{{
 
 
-! command -v $FORMAT_PRG > /dev/null 2>&1 && echo "Format program $FORMAT_PRG does not exist"
+clog () {
+    local COLOR=""
+    case "$1" in
+        error)
+            COLOR="$LOG_ERROR_COLOR"
+            ;;
+        info)
+            COLOR="$LOG_INFO_COLOR"
+            ;;
+        success)
+            COLOR="$LOG_SUCCESS_COLOR"
+            ;;
+        warn)
+            color="$LOG_WARN_COLOR"
+            ;;
+    esac
 
-DEFAULT_IFS=$IFS
+    [ -z "$COLOR" ] && echo "BUG: Invalid color passed to log" && exit 1
 
-[ ! -d $OUT_DIR ] && mkdir $OUT_DIR
+    echo -e "${COLOR}${2}${LOG_DEFAULT_COLOR}$([ ! -z "$3" ] && echo " $3")"
+}
 
-for TEMPLATE in "$TEMPLATE_DIR"/*.html
-do
-    TEMPLATE_BASENAME=$(basename "$TEMPLATE" .html)
+bail () {
+    clog error "Error: $1" && exit 1
+}
 
-    echo "Building \"$TEMPLATE_BASENAME\""
 
-    TEMPLATE_SRC_DIR="$SRC_DIR/$TEMPLATE_BASENAME"
-    TEMPLATE_OUT_DIR="$OUT_DIR/$TEMPLATE_BASENAME"
+check_format_prg () {
+    FORMAT_CMD="cat"
 
-    [ ! -d "$TEMPLATE_OUT_DIR" ] && mkdir "$TEMPLATE_OUT_DIR"
+    [ ! -z "$FORMAT_PRG" ] && [ -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG"
 
+    [ ! -z "$FORMAT_PRG" ] && [ ! -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG $FORMAT_PRG_ARGS"
+
+    ! command -v $FORMAT_PRG > /dev/null 2>&1 && bail "Format program $FORMAT_PRG does not exist"
+}
+
+compile_template_file () {
+
+    SRC="$1"
+    DEST="$2"
+    TEMPLATE_FILE=""
+    TEMPLATE_FILE_CSS=""
+
+    SRC_RELATIVE_PATH="${INPUT#$SRC_DIR/}"
+    SRC_RELATIVE_DIRNAME=$(dirname "$SRC_RELATIVE_PATH")
+    SRC_RELATIVE_DIRNAME_DASHED=$(echo "$SRC_RELATIVE_DIRNAME" | sed -e 's/\//-/g')
+
+    TEMPLATE_FILE_CSS_DEST=""
+
+    # Try to find template from implicit dir
+    TEMPLATE_FILE_FIND=$(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_DASHED.html")
+    TEMPLATE_FILE_CSS_FIND=$(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_DASHED.css")
+
+    [ ! -z "$TEMPLATE_FILE_FIND" ] && TEMPLATE_FILE="$TEMPLATE_FILE_FIND"
+    [ ! -z "$TEMPLATE_FILE_CSS_FIND" ] && TEMPLATE_FILE_CSS="$TEMPLATE_FILE_CSS_FIND"
+    [ ! -z "$TEMPLATE_FILE_CSS" ] && TEMPLATE_FILE_CSS_DEST="$(dirname $DEST)/$(basename $TEMPLATE_FILE_CSS)"
+
+    FRONTMATTER=$(sed -n '/---/,/---/{/---/b;/---/b;p}' "$SRC")
+    FRONTMATTER_NAMES=$(echo "$FRONTMATTER" |  grep '=*' | sed 's;=.*;;')
+
+    set -a
+    eval "$FRONTMATTER"
+    set +a
+
+    # If TEMPLATE_FILE was explicitly set in FRONTMATTER, check if css file exists, if so copy it if not already in dest dir
+    [ ! -z "$TEMPLATE_FILE" ] && 
+        [ -f "$(dirname $TEMPLATE_FILE)/$(basename $TEMPLATE_FILE .html).css" ]  &&
+        TEMPLATE_FILE_CSS="$(dirname $TEMPLATE_FILE)/$(basename $TEMPLATE_FILE .html).css" &&
+        TEMPLATE_FILE_CSS_DEST="$(dirname $DEST)/$(basename $TEMPLATE_FILE_CSS)"
+
+    [ -z "$TEMPLATE_FILE" ] && clog error "Error: " "Template file does not exist for $SRC" && return 1
+    [ ! -f "$TEMPLATE_FILE" ] && clog error "Error: " "Template file $TEMPLATE_FILE does not exist." && return 1
+
+    MD_BODY=$(sed '1 { /^---/ { :a N; /\n---/! ba; d} }' "$SRC")
     
-    TARGET_FILES=$(find "$TEMPLATE_SRC_DIR" -type f -name "*.md")
-    NON_TARGET_FILES=$(find "$TEMPLATE_SRC_DIR" -type f ! -name "*.md")
+    export BODY=$(parse_md "$MD_BODY")
 
-    for TARGET in $TARGET_FILES
+    envsubst < "$TEMPLATE_FILE" | $FORMAT_CMD > "$DEST"
+
+    unset $FRONTMATTER_NAMES
+
+    clog success "Built" "$SRC --> $DEST"
+
+    [ ! -z "$TEMPLATE_FILE_CSS" ] && 
+        [ -f "$TEMPLATE_FILE_CSS" ] && 
+        ! cmp -s "$TEMPLATE_FILE_CSS" "$TEMPLATE_FILE_CSS_DEST" &&
+        cat "$TEMPLATE_FILE_CSS" > "$TEMPLATE_FILE_CSS_DEST" &&
+        clog success "Copied" "$TEMPLATE_FILE_CSS --> $TEMPLATE_FILE_CSS_DEST"
+
+}
+
+copy_non_template_file () {
+
+    SRC="$1" DEST="$2"
+
+    cp "$SRC" "$DEST" && clog success "Copied" "$SRC --> $DEST"
+}
+
+
+build_file () {
+    INPUT="$1"
+
+    EXTENSION="${INPUT##*.}"
+
+    OUTPUT_DIR="$OUT_DIR$(dirname ${INPUT#$SRC_DIR})"
+    OUTPUT_FILE="$(basename $INPUT $EXTENSION)$([ $EXTENSION = "md" ] && echo 'html' || echo $EXTENSION)"
+
+    OUTPUT="$OUTPUT_DIR/$OUTPUT_FILE"
+
+    [ ! -d "$OUTPUT_DIR" ] && mkdir -p "$OUTPUT_DIR" && clog success "Created directory" "$OUTPUT_DIR"
+
+    [ "$EXTENSION" = "md" ] && compile_template_file "$INPUT" "$OUTPUT" && return $?
+
+    [ "$EXTENSION" != "md" ]  && copy_non_template_file "$INPUT" "$OUTPUT" && return $?
+
+}
+
+
+build () {
+    check_format_prg
+
+    DEFAULT_IFS="$IFS"
+
+    SRC_DIRS=$(find "$SRC_DIR" -not -empty -type d)
+    SRC_FILES=$(find "$SRC_DIR" -type f)
+
+    for FILE in $SRC_FILES
     do
-        TARGET_BASENAME=$(basename "$TARGET" .md)
-        TEMPLATE_OUT_PATH="$TEMPLATE_OUT_DIR/$TARGET_BASENAME.html"
-
-        eval $(parse_frontmatter "$TARGET")
-
-        IFS='|'
-
-        for FRONTMATTER_VAL in $FRONTMATTER_TAGS
-        do
-          export "$FRONTMATTER_VAL"
-        done
-
-        IFS=$DEFAULT_IFS
-
-        export MD_BODY=$(sed '1 { /^---/ { :a N; /\n---/! ba; d} }' "$TARGET")
-
-        export body=$(parse_md "$MD_BODY")
-
-        envsubst < "$TEMPLATE" | $FORMAT_CMD > "$TEMPLATE_OUT_PATH"
-
-        echo "Built $TARGET --> $TEMPLATE_OUT_PATH"
-
+        build_file "$FILE"
     done
-    
-    for NON_TARGET_FILE in $NON_TARGET_FILES
-    do
-        cp "$NON_TARGET_FILE" "$TEMPLATE_OUT_DIR"
-        
-        echo "Copied $NON_TARGET_FILES --> $TEMPLATE_OUT_DIR"
-    done
-done
+
+}
+
+#}}}
+
+#### Init ####{{{
+
+init_dir () {
+    [ ! -d "$1" ] && mkdir $1 && clog success "Created" "$1" 
+    [ -d "$1" ] && clog info "Exists" "$1"
+}
+
+init () {
+    init_dir $SRC_DIR
+    init_dir $OUT_DIR
+    init_dir $TEMPLATE_DIR
+    return 0
+}
+
+#}}}
+
+[ -z "$1" ] && build
+
+[ "$1" = "init" ] && init
