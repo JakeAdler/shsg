@@ -3,26 +3,27 @@
 #### Config ####{{{
 
 # Required
-SRC_DIR="src"
-OUT_DIR="public"
-TEMPLATE_DIR="templates"
+readonly SRC_DIR="src"
+readonly OUT_DIR="public"
+readonly TEMPLATE_DIR="templates"
 
 # Optional (But recomended)
-FORMAT_PRG=""
-FORMAT_PRG_ARGS=""
+readonly FORMAT_PRG=""
+readonly FORMAT_PRG_ARGS=""
 
 # Optional
-LOG_DEFAULT_COLOR="\033[0m"
-LOG_ERROR_COLOR="\033[1;31m"
-LOG_INFO_COLOR="\033[34m"
-LOG_SUCCESS_COLOR="\033[1;32m"
-LOG_WARN_COLOR="\033[1;33m"
+readonly LOG_DEFAULT_COLOR="\033[0m"
+readonly LOG_ERROR_COLOR="\033[1;31m"
+readonly LOG_INFO_COLOR="\033[34m"
+readonly LOG_SUCCESS_COLOR="\033[1;32m"
+readonly LOG_WARN_COLOR="\033[1;33m"
 
 #}}}
 
-#### parse_md ####{{{
-parse_md() {
-    OUT="$1"
+#### Utility functions (internal) ####{{{
+
+__parse_md() {
+    local MD_OUT="$1"
 
     IFS='
     '
@@ -33,23 +34,23 @@ parse_md() {
         ref_url=$(echo -n "$ref" | sed -nr "s/^\[.+\]: (.+)/\1/p" | cut -d' ' -f1 | tr -d '\n')
         ref_title=$(echo -n "$ref" | sed -nr "s/^\[.+\]: (.+) \"(.+)\"/\2/p" | sed 's@|@!@g' | tr -d '\n')
         # reference-style image using the label
-        OUT=$(echo "$OUT" | sed -r "s|!\[([^]]+)\]\[($ref_id)\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
+        local MD_OUT=$(echo "$OUT" | sed -r "s|!\[([^]]+)\]\[($ref_id)\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
         # reference-style link using the label
-        OUT=$(echo "$OUT" | sed -r "s|\[([^]]+)\]\[($ref_id)\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
+        local MD_OUT=$(echo "$OUT" | sed -r "s|\[([^]]+)\]\[($ref_id)\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
         # implicit reference-style
-        OUT=$(echo "$OUT" | sed -r "s|!\[($ref_id)\]\[\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
+        local MD_OUT=$(echo "$OUT" | sed -r "s|!\[($ref_id)\]\[\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
         # implicit reference-style
-        OUT=$(echo "$OUT" | sed -r "s|\[($ref_id)\]\[\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
+        local MD_OUT=$(echo "$OUT" | sed -r "s|\[($ref_id)\]\[\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
     done
 
     # delete the reference lines
-    OUT=$(echo -n "$OUT" | sed -r "/^\[.+\]: +/d")
+    local MD_OUT=$(echo -n "$OUT" | sed -r "/^\[.+\]: +/d")
 
     # blockquotes
     # use grep to find all the nested blockquotes
     while echo "$OUT" | grep '^> ' >/dev/null
     do
-        OUT=$(echo -n "$OUT" | sed -nr '
+        local MD_OUT=$(echo -n "$OUT" | sed -nr '
         /^$/b blockquote
         H
         $ b blockquote
@@ -60,16 +61,16 @@ parse_md() {
         p
         ')
 
-        OUT=$(echo "$OUT" | sed '1 d')
+        local MD_OUT=$(echo "$OUT" | sed '1 d')
 
         # cleanup blank lines and remove subsequent blockquote characters
-        OUT=$(echo -n "$OUT" | sed -r '
+        local MD_OUT=$(echo -n "$OUT" | sed -r '
         /^> /s/^> (.*)/\1/
         ')
     done
 
     # Setext-style headers
-    OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$OUT" | sed -nr '
     # Setext-style headers need to be wrapped around newlines
     /^$/ b print
     # else, append to holding area
@@ -91,10 +92,10 @@ parse_md() {
     p
     ')
 
-    OUT=$(echo "$OUT" | sed '1 d')
+    local MD_OUT=$(echo "$OUT" | sed '1 d')
 
     # atx-style headers and other block styles
-    OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$OUT" | sed -r '
     /^#+ /s/ #+$// # kill all ending header characters
     /^# /s/# ([A-Za-z0-9 ]*)(.*)/<h1 id="\1">\1\2<\/h1>/g # H1
     /^#{2} /s/#{2} ([A-Za-z0-9 ]*)(.*)/<h2 id="\1">\1\2<\/h2>/g # H2
@@ -111,7 +112,7 @@ parse_md() {
     # use grep to find all the nested lists
     while echo "$OUT" | grep '^[\*\+\-] ' >/dev/null
     do
-        OUT=$(echo -n "$OUT" | sed -nr '
+        local MD_OUT=$(echo -n "$OUT" | sed -nr '
         # wrap the list
         /^$/b list
         # wrap the li tags then add to the hold buffer
@@ -134,20 +135,20 @@ parse_md() {
         p
         ')
 
-        OUT=$(echo "$OUT" | sed -i '1 d')
+        local MD_OUT=$(echo "$OUT" | sed -i '1 d')
 
         # convert to the proper li to avoid collisions with nested lists
-        OUT=$(echo "$OUT" | sed -i 's/uli>/li>/g')
+        local MD_OUT=$(echo "$OUT" | sed -i 's/uli>/li>/g')
 
         # prepare any nested lists
-        OUT=$(echo "$OUT" | sed -ri '/^[\*\+\-] /s/(.*)/\n\1\n/')
+        local MD_OUT=$(echo "$OUT" | sed -ri '/^[\*\+\-] /s/(.*)/\n\1\n/')
     done
 
     # ordered lists
     # use grep to find all the nested lists
     while echo "$OUT" | grep -E '^[1-9]+\. ' >/dev/null
     do
-        OUT=$(echo -n "$OUT" | sed -nr '
+        local MD_OUT=$(echo -n "$OUT" | sed -nr '
         # wrap the list
         /^$/b list
         # wrap the li tags then add to the hold buffer
@@ -169,20 +170,20 @@ parse_md() {
         p
         ')
 
-        OUT=$(echo -n "$OUT" | sed '1 d' )# cleanup superfluous first line
+        local MD_OUT=$(echo -n "$OUT" | sed '1 d' )# cleanup superfluous first line
 
         # convert list items into proper list items to avoid collisions with nested lists
-        OUT=$(echo -n "$OUT" | sed 's/oli>/li>/g')
+        local MD_OUT=$(echo -n "$OUT" | sed 's/oli>/li>/g')
 
         # prepare any nested lists
-        OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\. /s/(.*)/\n\1\n/')
+        local MD_OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\. /s/(.*)/\n\1\n/')
     done
 
     # make escaped periods literal
-    OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\\. /s/([1-9]+)\\. /\1\. /')
+    local MD_OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\\. /s/([1-9]+)\\. /\1\. /')
 
     # convert html characters inside pre-code tags into printable representations
-    OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$OUT" | sed -r '
     # get inside pre-code tags
     /^<pre><code>/{
     :inside
@@ -198,10 +199,10 @@ parse_md() {
     ')
 
     # remove the first tab (or 4 spaces) from the code lines
-    OUT=$(echo -n "$OUT" | sed -r 's/^\t| {4}(.*)/\1/')
+    local MD_OUT=$(echo -n "$OUT" | sed -r 's/^\t| {4}(.*)/\1/')
 
     # br tags
-    OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$OUT" | sed -r '
     # if an empty line, append it to the next line, then check on whether there is two in a row
     /^$/ {
     N
@@ -211,7 +212,7 @@ parse_md() {
     ')
 
     # emphasis and strong emphasis and strikethrough
-    OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$OUT" | sed -nr '
     # batch up the entire stream of text until a line break in the action
     /^$/b emphasis
     H
@@ -227,10 +228,10 @@ parse_md() {
     p
     ')
 
-    OUT=$(echo -n "$OUT" | sed '1 d' )
+    local MD_OUT=$(echo -n "$OUT" | sed '1 d' )
 
     # paragraphs
-    OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$OUT" | sed -nr '
     # if an empty line, check the paragraph
     /^$/ b para
     # else append it to the hold buffer
@@ -252,10 +253,10 @@ parse_md() {
     p
     ')
 
-    OUT=$(echo -n "$OUT" | sed '1 d' )
+    local MD_OUT=$(echo -n "$OUT" | sed '1 d' )
 
     # cleanup area where P tags have broken nesting
-    OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$OUT" | sed -nr '
     # if the line looks like like an end tag
     /^<\/(div|table|pre|p|[ou]l|h[1-6]|[bh]r|blockquote)>/{
     h
@@ -279,7 +280,7 @@ parse_md() {
     ')
 
     # inline styles and special characters
-    OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$OUT" | sed -r '
     s/<(http[s]?:\/\/.*)>/<a href=\"\1\">\1<\/a>/g # automatic links
     s/<(.*@.*\..*)>/<a href=\"mailto:\1\">\1<\/a>/g # automatic email address links
     # inline code
@@ -308,12 +309,7 @@ parse_md() {
     echo -n "$OUT"
 }
 
-# }}}
-
-#### Build ####{{{
-
-
-clog () {
+__clog () {
     local COLOR=""
     case "$1" in
         error)
@@ -335,47 +331,91 @@ clog () {
     echo -e "${COLOR}${2}${LOG_DEFAULT_COLOR}$([ ! -z "$3" ] && echo " $3")"
 }
 
-bail () {
-    clog error "Error: $1" && exit 1
+__bail () {
+    __clog error "Error: $1" && exit 1
 }
 
-
-check_format_prg () {
-    FORMAT_CMD="cat"
+__get_format_cmd () {
+    local FORMAT_CMD="cat"
 
     [ ! -z "$FORMAT_PRG" ] && [ -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG"
 
     [ ! -z "$FORMAT_PRG" ] && [ ! -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG $FORMAT_PRG_ARGS"
 
-    ! command -v $FORMAT_PRG > /dev/null 2>&1 && bail "Format program $FORMAT_PRG does not exist"
+    echo "$FORMAT_CMD"
 }
+
+__infer_template_file () {
+    local SRC="$1"
+    local EXTENSION="$2"
+
+    local SRC_RELATIVE_PATH="${SRC#$SRC_DIR/}"
+    local SRC_RELATIVE_DIRNAME=$(dirname "$SRC_RELATIVE_PATH")
+    local SRC_RELATIVE_DIRNAME_UNDERSCORED=$(echo "$SRC_RELATIVE_DIRNAME" | sed -e 's/\//_/g')
+
+    echo $(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_UNDERSCORED.$EXTENSION")
+
+}
+
+#}}}
+
+#### Utility functions (external) ####{{{
+
+parse_frontmatter () {
+    local SRC="$1"
+
+    local FRONTMATTER=$(sed -n '/---/,/---/{/---/b;/---/b;p}' "$SRC")
+
+    echo "$FRONTMATTER"
+}
+
+get_extension() {
+    local INPUT="$1"
+    
+    echo "${INPUT##*.}"
+}
+
+infer_out_path () {
+    local IN_PATH="$1"
+
+    local EXTENSION=$(get_extension "$IN_PATH")
+
+    # Note here "$OUT_DIR" is reffering to the global declared in config.
+    local OUT_PATH_DIR="$OUT_DIR$(dirname ${INPUT#$SRC_DIR})"
+    local OUT_PATH_FILE="$(basename $IN_PATH $EXTENSION)$([ $EXTENSION = "md" ] && echo 'html' || echo $EXTENSION)"
+
+    local OUT_PATH="$OUT_PATH_DIR/$OUT_PATH_FILE"
+
+    echo "$OUT_PATH"
+}
+
+#}}}
+
+#### Build ####{{{
 
 compile_template_file () {
 
-    SRC="$1"
-    DEST="$2"
-    TEMPLATE_FILE=""
-    TEMPLATE_FILE_CSS=""
+    local SRC="$1"
+    local DEST="$2"
 
-    SRC_RELATIVE_PATH="${INPUT#$SRC_DIR/}"
-    SRC_RELATIVE_DIRNAME=$(dirname "$SRC_RELATIVE_PATH")
-    SRC_RELATIVE_DIRNAME_DASHED=$(echo "$SRC_RELATIVE_DIRNAME" | sed -e 's/\//-/g')
+    local TEMPLATE_FILE=$(__infer_template_file "$SRC" "html")
+    local TEMPLATE_FILE_CSS=$(__infer_template_file "$SRC" "css")
 
-    TEMPLATE_FILE_CSS_DEST=""
+    local TEMPLATE_FILE_CSS_DEST=""
 
-    # Try to find template from implicit dir
-    TEMPLATE_FILE_FIND=$(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_DASHED.html")
-    TEMPLATE_FILE_CSS_FIND=$(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_DASHED.css")
-
-    [ ! -z "$TEMPLATE_FILE_FIND" ] && TEMPLATE_FILE="$TEMPLATE_FILE_FIND"
-    [ ! -z "$TEMPLATE_FILE_CSS_FIND" ] && TEMPLATE_FILE_CSS="$TEMPLATE_FILE_CSS_FIND"
     [ ! -z "$TEMPLATE_FILE_CSS" ] && TEMPLATE_FILE_CSS_DEST="$(dirname $DEST)/$(basename $TEMPLATE_FILE_CSS)"
 
-    FRONTMATTER=$(sed -n '/---/,/---/{/---/b;/---/b;p}' "$SRC")
-    FRONTMATTER_NAMES=$(echo "$FRONTMATTER" |  grep '=*' | sed 's;=.*;;')
+    local __FRONTMATTER=$(parse_frontmatter "$SRC")
+    local __FRONTMATTER_NAMES=$(echo "$__FRONTMATTER" |  grep '=*' | sed 's;=.*;;')
 
+    local MD_BODY=$(sed '1 { /^---/ { :a N; /\n---/! ba; d} }' "$SRC")
+    
     set -a
-    eval "$FRONTMATTER"
+
+    BODY=$(__parse_md "$MD_BODY")
+
+    eval "$__FRONTMATTER"
+
     set +a
 
     # If TEMPLATE_FILE was explicitly set in FRONTMATTER, check if css file exists, if so copy it if not already in dest dir
@@ -384,46 +424,43 @@ compile_template_file () {
         TEMPLATE_FILE_CSS="$(dirname $TEMPLATE_FILE)/$(basename $TEMPLATE_FILE .html).css" &&
         TEMPLATE_FILE_CSS_DEST="$(dirname $DEST)/$(basename $TEMPLATE_FILE_CSS)"
 
-    [ -z "$TEMPLATE_FILE" ] && clog error "Error: " "Template file does not exist for $SRC" && return 1
-    [ ! -f "$TEMPLATE_FILE" ] && clog error "Error: " "Template file $TEMPLATE_FILE does not exist." && return 1
+    [ -z "$TEMPLATE_FILE" ] && __clog error "Error: " "Template file does not exist for $SRC" && return 1
 
-    MD_BODY=$(sed '1 { /^---/ { :a N; /\n---/! ba; d} }' "$SRC")
-    
-    export BODY=$(parse_md "$MD_BODY")
+    [ ! -f "$TEMPLATE_FILE" ] && __clog error "Error: " "Template file $TEMPLATE_FILE does not exist." && return 1
+
+    local FORMAT_CMD="$(__get_format_cmd)"
 
     envsubst < "$TEMPLATE_FILE" | $FORMAT_CMD > "$DEST"
 
-    unset $FRONTMATTER_NAMES
+    unset "$__FRONTMATTER_NAMES"
 
-    clog success "Built" "$SRC --> $DEST"
+    __clog success "Built" "$SRC --> $DEST"
 
     [ ! -z "$TEMPLATE_FILE_CSS" ] && 
         [ -f "$TEMPLATE_FILE_CSS" ] && 
         ! cmp -s "$TEMPLATE_FILE_CSS" "$TEMPLATE_FILE_CSS_DEST" &&
         cat "$TEMPLATE_FILE_CSS" > "$TEMPLATE_FILE_CSS_DEST" &&
-        clog success "Copied" "$TEMPLATE_FILE_CSS --> $TEMPLATE_FILE_CSS_DEST"
+        __clog success "Copied" "$TEMPLATE_FILE_CSS --> $TEMPLATE_FILE_CSS_DEST"
 
 }
 
 copy_non_template_file () {
 
-    SRC="$1" DEST="$2"
+    local SRC="$1" 
+    local DEST="$2"
 
-    cp "$SRC" "$DEST" && clog success "Copied" "$SRC --> $DEST"
+    cp "$SRC" "$DEST" && __clog success "Copied" "$SRC --> $DEST"
 }
 
 
 build_file () {
-    INPUT="$1"
+    local INPUT="$1"
 
-    EXTENSION="${INPUT##*.}"
+    local OUTPUT=$(infer_out_path "$INPUT")
 
-    OUTPUT_DIR="$OUT_DIR$(dirname ${INPUT#$SRC_DIR})"
-    OUTPUT_FILE="$(basename $INPUT $EXTENSION)$([ $EXTENSION = "md" ] && echo 'html' || echo $EXTENSION)"
+    local EXTENSION=$(get_extension "$INPUT")
 
-    OUTPUT="$OUTPUT_DIR/$OUTPUT_FILE"
-
-    [ ! -d "$OUTPUT_DIR" ] && mkdir -p "$OUTPUT_DIR" && clog success "Created directory" "$OUTPUT_DIR"
+    [ ! -d $(dirname "$OUTPUT") ] && mkdir $(dirname "$OUTPUT") && __clog success "Created" $(dirname "$OUTPUT")
 
     [ "$EXTENSION" = "md" ] && compile_template_file "$INPUT" "$OUTPUT" && return $?
 
@@ -433,8 +470,12 @@ build_file () {
 
 
 build () {
-    check_format_prg
 
+    [ ! -z "FORMAT_PRG" ] && 
+        ! command -v $FORMAT_PRG > /dev/null 2>&1 && 
+        __bail "Format program $FORMAT_PRG does not exist"
+
+    [ ! -d "$OUT_DIR" ] && mkdir "$OUT_DIR" && __clog success "Created" "$OUT_DIR"
     DEFAULT_IFS="$IFS"
 
     SRC_DIRS=$(find "$SRC_DIR" -not -empty -type d)
@@ -452,8 +493,8 @@ build () {
 #### Init ####{{{
 
 init_dir () {
-    [ ! -d "$1" ] && mkdir $1 && clog success "Created" "$1" 
-    [ -d "$1" ] && clog info "Exists" "$1"
+    [ -d "$1" ] && __clog info "Exists" "$1"
+    [ ! -d "$1" ] && mkdir $1 && __clog success "Created" "$1" 
 }
 
 init () {

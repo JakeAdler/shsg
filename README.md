@@ -1,6 +1,6 @@
-# shsg
+# shsg.sh
 
-### sh site generator
+`shsg.sh` is a shell script for generating simple, static websites.
 
 ## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) | [Credit](#Credit) ]
 
@@ -59,6 +59,7 @@ FORMAT_PRG_ARGS="-iq --tidy-mark no"
 - [Initialization](#initialization)
 - [Writing markdown](#writing-markdown)
     - [Frontmatter](#frontmatter)
+    - [Markdown syntax caveats](#markdown-syntax-caveats)
 - [Other files](#other-files)
 - [Using Templates](#using-templates)
     - [Setting template explicitly](#setting-template-explicitly)
@@ -121,7 +122,7 @@ Will produce `public/blog/post-1.html`
 ```
 ### Markdown syntax caveats
 
-#### Code blocks (```)
+#### Multi-line blocks (``` | ~~~)
 
 **Wont work:**
 ~~~md
@@ -143,6 +144,33 @@ function add (a, b) {
 </code></pre>
 ~~~
 
+#### Nested lists 
+
+**Will work**
+```md
+- List
+- Item
+```
+
+**Wont work**
+
+```md
+- List
+- Item
+    - Child
+
+```
+
+**Will work**
+```md
+<ul>
+    <li> List </li>
+    <li> Item </li>
+    <ul>
+        <li> Child </li>
+    </ul>
+</ul>
+```
 
 ## Other files
 
@@ -175,22 +203,18 @@ For example, using the following directory structure:
 
 You can make `src/about_me.md.` use `templates/layout.html` by setting `TEMPLATE_FILE="templates/layout.html"` in the frontmatter of `src/about_me.md`.
 
-Example:
 `src/about_me.md`
 ```md
 ---
-...
 TEMPLATE_FILE="templates/layout.html"
 ---
 
 Lorem ipsum dolor sit amet.
 ```
 
-
-
 ### Setting template implicitly
 
-For each file in `TEMPLATE_DIR`, `shsg.sh` will look for a directory with a corresponding directory name, `templates/foo` would implicitly be used for all markdown file in `src/foo/*`.
+For each file in `TEMPLATE_DIR`, `shsg.sh` will look for a directory with a corresponding directory name, `templates/foo.html` would implicitly be used for all markdown file in `src/foo/*`.
 
 For example, using the following directory structure:
 
@@ -205,6 +229,12 @@ For example, using the following directory structure:
 ```
 
 All files in `src/blog`, `post-1.md` will have it's template implicitly set to `templates/blog.html`.
+
+#### Implicitly targeting nested directories
+
+Typically, template files will correspond to a directory in `$SRC_DIR/$(basename TEMPLATE_FILE .html)` (e.g. `templates/blog` corresponds to `src/blog`). 
+
+To target a nested directory (e.g `src/blog/special-posts/`), replace directory seperators (`/`) after `SRC_DIR` with underscores `_` (e.g. `templates/blog_special-posts.html`).
 
 ### Templates and CSS
 
