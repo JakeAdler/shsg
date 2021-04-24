@@ -12,7 +12,7 @@ First, create and cd into the directory where you'd like to store your project e
 mkdir my-site && cd my-site
 ```
 
-### Install the build script 
+### Install the script 
 
 ```console
 # wget
