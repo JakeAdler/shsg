@@ -1,6 +1,6 @@
 # shsg.sh
 
-`shsg.sh` is a shell script for generating simple, static websites.
+`shsg.sh` is a shell script for generating simple, static websites from markdown files.
 
 ## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) | [Credit](#Credit) ]
 
@@ -87,7 +87,7 @@ Most of the markdown spec is supported with some exceptions, see [caveats](#mark
 
 ### Frontmatter
 
-Frontmatter in `shsg.sh` is very powerful, since everything between the YAML frontmatter delimiters (`---`) is treated as shell script.
+Frontmatter in `shsg.sh` is very powerful, since everything between the frontmatter delimiters (`---`) is treated as shell script.
 
 For example:
 
@@ -214,9 +214,9 @@ Lorem ipsum dolor sit amet.
 
 ### Setting template implicitly
 
-For each file in `TEMPLATE_DIR`, `shsg.sh` will look for a directory with a corresponding directory name, `templates/foo.html` would implicitly be used for all markdown file in `src/foo/*`.
+For each file in `TEMPLATE_DIR`, `shsg.sh` will look for a directory with a corresponding directory name.
 
-For example, using the following directory structure:
+`templates/blog.html` would implicitly be used for all markdown files in `src/blog/`.
 
 ```console
 ├── public
@@ -227,8 +227,6 @@ For example, using the following directory structure:
 │   └── blog.html
 └── shsg.sh
 ```
-
-All files in `src/blog`, `post-1.md` will have it's template implicitly set to `templates/blog.html`.
 
 #### Implicitly targeting nested directories
 
