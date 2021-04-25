@@ -6,6 +6,7 @@
 readonly SRC_DIR="src"
 readonly OUT_DIR="public"
 readonly TEMPLATE_DIR="templates"
+readonly SAFE_BODY=true
 readonly QUIET=false
 
 # Optional
@@ -458,9 +459,11 @@ compile_template_file () {
     
     set -a
 
-    BODY=$(__use_parser_prg $MD_BODY)
+    [ $SAFE_BODY = false ] && BODY=$(__use_parser_prg "$MD_BODY")
 
     eval "$__FRONTMATTER"
+
+    [ $SAFE_BODY = true ] && BODY=$(__use_parser_prg "$MD_BODY")
 
     set +a
 

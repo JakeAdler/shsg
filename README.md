@@ -31,16 +31,17 @@ chmod +x ./shsg.sh
 
 After installing `shsg.sh`, open it in a text editor and make any necessary changes.
 
-| name              | description                                     | default     | required                 |
-|-------------------|-------------------------------------------------|-------------|--------------------------|
-| `SRC_DIR`         | where source files are located                  | "src"       | yes                      |
-| `OUT_DIR`         | where output files are located                  | "public"    | yes                      |
-| `TEMPLATE_DIR`    | where template files are located                | "templates" | yes (if using templates) |
-| `QUIET`           | quiet mode                                      | false       | yes
-| `FORMAT_PRG`      | command that will format outputted html files   | NONE        | no                       |
-| `FORMAT_PRG_ARGS` | arguments/flags passed to `FORMAT_PRG`          | NONE        | no                       |
-| `PARSER_PRG`      | command that will parse markdown into html      | NONE        | no                       |
-| `PARSER_PRG_ARGS` | arguments/flags passed to `PARSER_PRG`          | NONE        | no                       |
+| name              | description                                     | default     | required   |
+|-------------------|-------------------------------------------------|-------------|------------|
+| `SRC_DIR`         | where source files are located                  | "src"       | yes        |
+| `OUT_DIR`         | where output files are located                  | "public"    | yes        |
+| `TEMPLATE_DIR`    | where template files are located                | "templates" | yes        |
+| `SAFE_BODY`       | markdown body protected or can be overriden     | true        | yes        |
+| `QUIET`           | quiet mode                                      | false       | yes        |
+| `FORMAT_PRG`      | command that will format outputted html files   | NONE        | no         |
+| `FORMAT_PRG_ARGS` | arguments/flags passed to `FORMAT_PRG`          | NONE        | no         |
+| `PARSER_PRG`      | command that will parse markdown into html      | NONE        | no         |
+| `PARSER_PRG_ARGS` | arguments/flags passed to `PARSER_PRG`          | NONE        | no         |
 
 #### Example `FORMAT_PRG` configurations
 
@@ -136,6 +137,15 @@ Will produce `public/blog/post-1.html`
     </div>
 </div>
 ```
+
+There are a few values which can be overriden in frontmatter that will effect how the file gets built:
+
+| Name                | Description                                                       |
+|---------------------|-------------------------------------------------------------------|
+| `TEMPLATE_FILE`     | Relative path (e.g. `templates/blog.html`) to template HTML file. |
+| `TEMPLATE_FILE_CSS` | Relative path (e.g. `templates/blog.css` to template CSS file.    |
+| `BODY`              | Body of the markdown file (only if `SAFE_BODY` is false)          |
+
 ### [markdown.bash](https://github.com/chadbraunduin/markdown.bash) caveats
 
 #### Multi-line blocks (``` | ~~~)
@@ -194,7 +204,7 @@ All non-markdown files will be copied to the public directory, including HTML an
 
 ## Using templates
 
-Templates are HTML files which contain shell variables, these shell variables will be replaced by [frontmatter]() values, or in some special cases, by values set by `shsg.sh`.
+Templates are HTML files which contain shell variables, these shell variables will be replaced by [frontmatter](#frontmatter) values, or in some special cases, by values set by `shsg.sh`.
 
 Values set by `shsg.sh`:
 
