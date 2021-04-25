@@ -6,12 +6,15 @@
 readonly SRC_DIR="src"
 readonly OUT_DIR="public"
 readonly TEMPLATE_DIR="templates"
+readonly QUIET=false
 
-# Optional (But recomended)
+# Optional
+readonly PARSER_PRG=""
+readonly PARSER_PRG_ARGS=""
 readonly FORMAT_PRG=""
 readonly FORMAT_PRG_ARGS=""
 
-# Optional
+# Colors
 readonly LOG_DEFAULT_COLOR="\033[0m"
 readonly LOG_ERROR_COLOR="\033[1;31m"
 readonly LOG_INFO_COLOR="\033[34m"
@@ -20,37 +23,36 @@ readonly LOG_WARN_COLOR="\033[1;33m"
 
 #}}}
 
-#### Utility functions (internal) ####{{{
-
+#### markdown.bash #####{{{
 __parse_md() {
     local MD_OUT="$1"
 
     IFS='
     '
-    refs=$(echo -n "$OUT" | sed -nr "/^\[.+\]: +/p") 
+    refs=$(echo -n "$MD_OUT" | sed -nr "/^\[.+\]: +/p") 
     for ref in $refs
     do
         ref_id=$(echo -n "$ref" | sed -nr "s/^\[(.+)\]: .*/\1/p" | tr -d '\n')
         ref_url=$(echo -n "$ref" | sed -nr "s/^\[.+\]: (.+)/\1/p" | cut -d' ' -f1 | tr -d '\n')
         ref_title=$(echo -n "$ref" | sed -nr "s/^\[.+\]: (.+) \"(.+)\"/\2/p" | sed 's@|@!@g' | tr -d '\n')
         # reference-style image using the label
-        local MD_OUT=$(echo "$OUT" | sed -r "s|!\[([^]]+)\]\[($ref_id)\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
+        local MD_OUT=$(echo "$MD_OUT" | sed -r "s|!\[([^]]+)\]\[($ref_id)\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
         # reference-style link using the label
-        local MD_OUT=$(echo "$OUT" | sed -r "s|\[([^]]+)\]\[($ref_id)\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
+        local MD_OUT=$(echo "$MD_OUT" | sed -r "s|\[([^]]+)\]\[($ref_id)\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
         # implicit reference-style
-        local MD_OUT=$(echo "$OUT" | sed -r "s|!\[($ref_id)\]\[\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
+        local MD_OUT=$(echo "$MD_OUT" | sed -r "s|!\[($ref_id)\]\[\]|<img src=\"$ref_url\" title=\"$ref_title\" alt=\"\1\" />|gI")
         # implicit reference-style
-        local MD_OUT=$(echo "$OUT" | sed -r "s|\[($ref_id)\]\[\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
+        local MD_OUT=$(echo "$MD_OUT" | sed -r "s|\[($ref_id)\]\[\]|<a href=\"$ref_url\" title=\"$ref_title\">\1</a>|gI")
     done
 
     # delete the reference lines
-    local MD_OUT=$(echo -n "$OUT" | sed -r "/^\[.+\]: +/d")
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r "/^\[.+\]: +/d")
 
     # blockquotes
     # use grep to find all the nested blockquotes
-    while echo "$OUT" | grep '^> ' >/dev/null
+    while echo "$MD_OUT" | grep '^> ' >/dev/null
     do
-        local MD_OUT=$(echo -n "$OUT" | sed -nr '
+        local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
         /^$/b blockquote
         H
         $ b blockquote
@@ -61,16 +63,16 @@ __parse_md() {
         p
         ')
 
-        local MD_OUT=$(echo "$OUT" | sed '1 d')
+        local MD_OUT=$(echo "$MD_OUT" | sed '1 d')
 
         # cleanup blank lines and remove subsequent blockquote characters
-        local MD_OUT=$(echo -n "$OUT" | sed -r '
+        local MD_OUT=$(echo -n "$MD_OUT" | sed -r '
         /^> /s/^> (.*)/\1/
         ')
     done
 
     # Setext-style headers
-    local MD_OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
     # Setext-style headers need to be wrapped around newlines
     /^$/ b print
     # else, append to holding area
@@ -92,10 +94,10 @@ __parse_md() {
     p
     ')
 
-    local MD_OUT=$(echo "$OUT" | sed '1 d')
+    local MD_OUT=$(echo "$MD_OUT" | sed '1 d')
 
     # atx-style headers and other block styles
-    local MD_OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r '
     /^#+ /s/ #+$// # kill all ending header characters
     /^# /s/# ([A-Za-z0-9 ]*)(.*)/<h1 id="\1">\1\2<\/h1>/g # H1
     /^#{2} /s/#{2} ([A-Za-z0-9 ]*)(.*)/<h2 id="\1">\1\2<\/h2>/g # H2
@@ -110,9 +112,9 @@ __parse_md() {
 
     # unordered lists
     # use grep to find all the nested lists
-    while echo "$OUT" | grep '^[\*\+\-] ' >/dev/null
+    while echo "$MD_OUT" | grep '^[\*\+\-] ' >/dev/null
     do
-        local MD_OUT=$(echo -n "$OUT" | sed -nr '
+        local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
         # wrap the list
         /^$/b list
         # wrap the li tags then add to the hold buffer
@@ -135,20 +137,20 @@ __parse_md() {
         p
         ')
 
-        local MD_OUT=$(echo "$OUT" | sed -i '1 d')
+        local MD_OUT=$(echo "$MD_OUT" | sed -i '1 d')
 
         # convert to the proper li to avoid collisions with nested lists
-        local MD_OUT=$(echo "$OUT" | sed -i 's/uli>/li>/g')
+        local MD_OUT=$(echo "$MD_OUT" | sed -i 's/uli>/li>/g')
 
         # prepare any nested lists
-        local MD_OUT=$(echo "$OUT" | sed -ri '/^[\*\+\-] /s/(.*)/\n\1\n/')
+        local MD_OUT=$(echo "$MD_OUT" | sed -ri '/^[\*\+\-] /s/(.*)/\n\1\n/')
     done
 
     # ordered lists
     # use grep to find all the nested lists
-    while echo "$OUT" | grep -E '^[1-9]+\. ' >/dev/null
+    while echo "$MD_OUT" | grep -E '^[1-9]+\. ' >/dev/null
     do
-        local MD_OUT=$(echo -n "$OUT" | sed -nr '
+        local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
         # wrap the list
         /^$/b list
         # wrap the li tags then add to the hold buffer
@@ -170,20 +172,20 @@ __parse_md() {
         p
         ')
 
-        local MD_OUT=$(echo -n "$OUT" | sed '1 d' )# cleanup superfluous first line
+        local MD_OUT=$(echo -n "$MD_OUT" | sed '1 d' )# cleanup superfluous first line
 
         # convert list items into proper list items to avoid collisions with nested lists
-        local MD_OUT=$(echo -n "$OUT" | sed 's/oli>/li>/g')
+        local MD_OUT=$(echo -n "$MD_OUT" | sed 's/oli>/li>/g')
 
         # prepare any nested lists
-        local MD_OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\. /s/(.*)/\n\1\n/')
+        local MD_OUT=$(echo -n "$MD_OUT" | sed -r '/^[1-9]+\. /s/(.*)/\n\1\n/')
     done
 
     # make escaped periods literal
-    local MD_OUT=$(echo -n "$OUT" | sed -r '/^[1-9]+\\. /s/([1-9]+)\\. /\1\. /')
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r '/^[1-9]+\\. /s/([1-9]+)\\. /\1\. /')
 
     # convert html characters inside pre-code tags into printable representations
-    local MD_OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r '
     # get inside pre-code tags
     /^<pre><code>/{
     :inside
@@ -199,10 +201,10 @@ __parse_md() {
     ')
 
     # remove the first tab (or 4 spaces) from the code lines
-    local MD_OUT=$(echo -n "$OUT" | sed -r 's/^\t| {4}(.*)/\1/')
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r 's/^\t| {4}(.*)/\1/')
 
     # br tags
-    local MD_OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r '
     # if an empty line, append it to the next line, then check on whether there is two in a row
     /^$/ {
     N
@@ -212,7 +214,7 @@ __parse_md() {
     ')
 
     # emphasis and strong emphasis and strikethrough
-    local MD_OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
     # batch up the entire stream of text until a line break in the action
     /^$/b emphasis
     H
@@ -228,10 +230,10 @@ __parse_md() {
     p
     ')
 
-    local MD_OUT=$(echo -n "$OUT" | sed '1 d' )
+    local MD_OUT=$(echo -n "$MD_OUT" | sed '1 d' )
 
     # paragraphs
-    local MD_OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
     # if an empty line, check the paragraph
     /^$/ b para
     # else append it to the hold buffer
@@ -253,10 +255,10 @@ __parse_md() {
     p
     ')
 
-    local MD_OUT=$(echo -n "$OUT" | sed '1 d' )
+    local MD_OUT=$(echo -n "$MD_OUT" | sed '1 d' )
 
     # cleanup area where P tags have broken nesting
-    local MD_OUT=$(echo -n "$OUT" | sed -nr '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -nr '
     # if the line looks like like an end tag
     /^<\/(div|table|pre|p|[ou]l|h[1-6]|[bh]r|blockquote)>/{
     h
@@ -280,7 +282,7 @@ __parse_md() {
     ')
 
     # inline styles and special characters
-    local MD_OUT=$(echo -n "$OUT" | sed -r '
+    local MD_OUT=$(echo -n "$MD_OUT" | sed -r '
     s/<(http[s]?:\/\/.*)>/<a href=\"\1\">\1<\/a>/g # automatic links
     s/<(.*@.*\..*)>/<a href=\"mailto:\1\">\1<\/a>/g # automatic email address links
     # inline code
@@ -306,10 +308,19 @@ __parse_md() {
     
     IFS=$DEFAULT_IFS
 
-    echo -n "$OUT"
+    local MD_OUT=$(echo -n "$MD_OUT" | sed ':a;N;$!ba;s/>\s*</></g')
+
+    echo -n "$MD_OUT"
 }
 
+#}}}
+
+#### Utility functions (internal) ####{{{
+
 __clog () {
+    [ "$QUIET" = true ]  && return 0 
+    [ "$CLI_QUIET" = true ] && return 0
+
     local COLOR=""
     case "$1" in
         error)
@@ -335,14 +346,52 @@ __bail () {
     __clog error "Error: $1" && exit 1
 }
 
+__check_prg_exists () {
+    local PRG="$1"
+    local LABEL="$2"
+
+    [ ! -z "$PRG" ] && 
+        ! command -v "$PRG" > /dev/null 2>&1 && 
+        __bail "$LABEL $PRG does not exist"
+}
+
+
+__preflight () {
+    __check_prg_exists "$PARSER_PRG" "Parser"
+    __check_prg_exists "$FORMAT_PRG" "Formatter"
+}
+
+__merge_prg_args () {
+    local PRG="$1"
+    local ARGS="$2"
+    local DEFAULT="$3"
+
+    local CMD=""
+
+    [ -z "$PRG" ] && [ -z "$ARGS"] && CMD="$DEFAULT"
+
+    [ ! -z "$PRG" ] && [ -z "$ARGS" ] && CMD="$PRG"
+
+    [ ! -z "$PRG" ] && [ ! -z "$ARGS" ] && CMD="$PRG $ARGS"
+
+    echo "$CMD"
+}
+
+__use_parser_prg () {
+    local INPUT="$1"
+
+    local PARSER_CMD=$(__merge_prg_args "$PARSER_PRG" "$PARSER_PRG_ARGS" 'markdown.bash')
+
+    if [ "$PARSER_CMD" = "markdown.bash" ]; then
+        echo "$(__parse_md $INPUT)"
+    else
+        echo "$INPUT" | $PARSER_CMD
+    fi
+}
+
 __get_format_cmd () {
-    local FORMAT_CMD="cat"
 
-    [ ! -z "$FORMAT_PRG" ] && [ -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG"
-
-    [ ! -z "$FORMAT_PRG" ] && [ ! -z "$FORMAT_PRG_ARGS" ] && FORMAT_CMD="$FORMAT_PRG $FORMAT_PRG_ARGS"
-
-    echo "$FORMAT_CMD"
+    echo $(__merge_prg_args "$FORMAT_PRG" "$FORMAT_PRG_ARGS" "cat")
 }
 
 __infer_template_file () {
@@ -362,17 +411,11 @@ __infer_template_file () {
 #### Utility functions (external) ####{{{
 
 parse_frontmatter () {
-    local SRC="$1"
-
-    local FRONTMATTER=$(sed -n '/---/,/---/{/---/b;/---/b;p}' "$SRC")
-
-    echo "$FRONTMATTER"
+    sed -n '/---/,/---/{/---/b;/---/b;p}' "$1"
 }
 
 get_extension() {
-    local INPUT="$1"
-    
-    echo "${INPUT##*.}"
+    echo "${1##*.}"
 }
 
 infer_out_path () {
@@ -395,6 +438,9 @@ infer_out_path () {
 
 compile_template_file () {
 
+    __preflight
+
+
     local SRC="$1"
     local DEST="$2"
 
@@ -412,7 +458,7 @@ compile_template_file () {
     
     set -a
 
-    BODY=$(__parse_md "$MD_BODY")
+    BODY=$(__use_parser_prg $MD_BODY)
 
     eval "$__FRONTMATTER"
 
@@ -471,20 +517,32 @@ build_file () {
 
 build () {
 
-    [ ! -z "FORMAT_PRG" ] && 
+    local START_MS=$(date +%s%N | cut -b1-13)
+
+    [ ! -z "$FORMAT_PRG" ] && 
         ! command -v $FORMAT_PRG > /dev/null 2>&1 && 
         __bail "Format program $FORMAT_PRG does not exist"
 
     [ ! -d "$OUT_DIR" ] && mkdir "$OUT_DIR" && __clog success "Created" "$OUT_DIR"
+
     DEFAULT_IFS="$IFS"
 
-    SRC_DIRS=$(find "$SRC_DIR" -not -empty -type d)
-    SRC_FILES=$(find "$SRC_DIR" -type f)
+    local SRC_FILES=$(find "$SRC_DIR" -type f)
 
     for FILE in $SRC_FILES
     do
         build_file "$FILE"
     done
+
+    local END_MS=$(date +%s%N | cut -b1-13)
+
+    local TIME_BUILT=$(echo "scale=2; ($END_MS - $START_MS)/1000" | bc -l)
+
+    local MD_FILES=$(find "$SRC_DIR" -type f -name "*.md" | wc -l)
+
+    local OTHER_FILES=$(find "$SRC_DIR" -type f -not -name "*.md" | wc -l)
+
+    __clog info "\nBuilt" "$MD_FILES markdown files and copied $OTHER_FILES other files in ${TIME_BUILT}s"
 
 }
 
@@ -506,6 +564,64 @@ init () {
 
 #}}}
 
+#### CLI ####{{{
+
+while getopts ":hq" opt; do
+  case ${opt} in
+    h ) # process option h
+        cat << USAGE
+
+${0} [COMMAND] [OPTIONS]
+
+Commands
+
+    NONE    build all files in SRC_DIR --> OUT_DIR
+    init    create SRC_DIR, OUT_DIR, and TEMPLATE_DIR
+
+Options
+
+    -h      print this message
+    -q      quiet mode ( same as setting QUIET=true)
+
+USAGE
+    exit 0
+        ;;
+    q )
+        readonly CLI_QUIET=true
+        ;;
+  esac
+done
+shift "$((OPTIND - 1))"
+
 [ -z "$1" ] && build
 
 [ "$1" = "init" ] && init
+#}}}
+
+#### License ####{{{
+<<LICENSE
+
+License for markdown.bash 
+
+MIT License
+
+Copyright (c) 2016 Chad Braun-Duin
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+License for shsg.sh
+
+Copyright 2021 Jake Adler
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+LICENSE
+#}}}

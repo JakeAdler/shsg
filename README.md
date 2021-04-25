@@ -31,15 +31,18 @@ chmod +x ./shsg.sh
 
 After installing `shsg.sh`, open it in a text editor and make any necessary changes.
 
-| Name              | Description                                     | Default     | Required                 |
+| name              | description                                     | default     | required                 |
 |-------------------|-------------------------------------------------|-------------|--------------------------|
-| `SRC_DIR`         | Where source files are located                  | "src"       | Yes                      |
-| `OUT_DIR`         | Where output files are located                  | "public"    | Yes                      |
-| `TEMPLATE_DIR`    | Where template files are located                | "templates" | Yes (If using templates) |
-| `FORMAT_PRG`      | Command that will format outputted html files   | NONE        | No (Recommended)         |
-| `FORMAT_PRG_ARGS` | Arguments/flags passed to `FORMAT_PRG`          | NONE        | No (Recommended)         |
+| `SRC_DIR`         | where source files are located                  | "src"       | yes                      |
+| `OUT_DIR`         | where output files are located                  | "public"    | yes                      |
+| `TEMPLATE_DIR`    | where template files are located                | "templates" | yes (if using templates) |
+| `QUIET`           | quiet mode                                      | false       | yes
+| `FORMAT_PRG`      | command that will format outputted html files   | NONE        | no                       |
+| `FORMAT_PRG_ARGS` | arguments/flags passed to `FORMAT_PRG`          | NONE        | no                       |
+| `PARSER_PRG`      | command that will parse markdown into html      | NONE        | no                       |
+| `PARSER_PRG_ARGS` | arguments/flags passed to `PARSER_PRG`          | NONE        | no                       |
 
-Here are some reccomended configurations for `FORMAT_PRG` and `FORMAT_PRG_ARGS`
+#### Example `FORMAT_PRG` configurations
 
 [Prettier](https://prettier.io/)
 ```sh
@@ -47,12 +50,25 @@ FORMAT_PRG="prettier"
 FORMAT_PRG_ARGS="--stdin-filepath $TEMPLATE_OUT_PATH --parser html"
 ```
 
-[tidy](https://www.html-tidy.org/)
+[Tidy](https://www.html-tidy.org/)
 ```
 FORMAT_PRG="tidy"
 FORMAT_PRG_ARGS="-iq --tidy-mark no"
 ```
 
+#### Example `PARSER_PRG` configurations
+
+[Pandoc](https://pandoc.org/)
+```sh
+PARSER_PRG="pandoc"
+PARSER_PRG_ARGS=""
+```
+
+[Marked](https://github.com/markedjs/marked)
+```sh
+PARSER_PRG="marked"
+PARSER_PRG_ARGS="--gfm" # For using github flavored markdown
+```
 
 ## Usage
 
@@ -81,9 +97,9 @@ Your directory structure should now look like this:
 
 ## Writing markdown
 
-`shsg.sh` uses a slightly stripped down and modified version of [markdown.bash]() to parse markdown.
+`shsg.sh` comes bundled with a stripped down and modified version of [markdown.bash](https://github.com/chadbraunduin/markdown.bash) to parse markdown, however you can [bring your own parser](#example-parser_prg-configurations).
 
-Most of the markdown spec is supported with some exceptions, see [caveats](#markdown-syntax-caveats).
+If using the bundled markdown parser, see [caveats](#markdownbash-caveats).
 
 ### Frontmatter
 
@@ -120,7 +136,7 @@ Will produce `public/blog/post-1.html`
     </div>
 </div>
 ```
-### Markdown syntax caveats
+### [markdown.bash](https://github.com/chadbraunduin/markdown.bash) caveats
 
 #### Multi-line blocks (``` | ~~~)
 
