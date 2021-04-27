@@ -11,6 +11,7 @@ readonly QUIET=false
 
 # Optional
 readonly CACHE_DIR=""
+
 readonly PARSER_CMD=""
 readonly FORMAT_CMD=""
 readonly SERVE_CMD=""
@@ -21,6 +22,7 @@ readonly LOG_ERROR_COLOR="\033[1;31m"
 readonly LOG_INFO_COLOR="\033[34m"
 readonly LOG_SUCCESS_COLOR="\033[1;32m"
 readonly LOG_WARN_COLOR="\033[1;33m"
+readonly ARROW_DOWN="\n\t↓\n\t"
 
 #}}}
 
@@ -343,6 +345,10 @@ __clog () {
     echo -e "${COLOR}${2}${LOG_DEFAULT_COLOR}$([ ! -z "$3" ] && echo " $3")"
 }
 
+__clog_verbose () {
+    [ "$CLI_VERBOSE" = true ] && __clog "$@"
+}
+
 __bail () {
     __clog error "Error: $1" && exit 1
 }
@@ -360,7 +366,7 @@ __check_prg_exists () {
     if [ "$REQUIRED" = true ]; then
         [ -z "$PRG" ] && __bail "$LABEL program is undefined" || __check "$PRG" "$LABEL"
     else
-        [ ! -z "$PRG"] && __check "$PRG" "$LABEL"
+        [ ! -z "$PRG" ] && __check "$PRG" "$LABEL"
     fi
 
 }
@@ -383,10 +389,30 @@ __infer_template_file () {
     echo $(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_UNDERSCORED.$EXTENSION")
 }
 
+__copy_implicit_template_css () {
+    local TEMPLATE="$1"
+    local SRC_FILE="$2"
+
+    local SRC_FILE_DEST=$(infer_out_path "$SRC_FILE")
+
+    local IMPLICIT_CSS_SRC="${TEMPLATE%.html}.css"
+
+    local IMPLICIT_CSS_OUT=$(dirname "$SRC_FILE_DEST")/$(basename "$IMPLICIT_CSS_SRC")
+
+    [ -f "$IMPLICIT_CSS_SRC" ] && 
+        cp "$IMPLICIT_CSS_SRC" "$IMPLICIT_CSS_OUT" && 
+        __clog_verbose info "Copied" "$IMPLICIT_CSS_SRC --> $IMPLICIT_CSS_OUT"
+}
+
 __resolve_template () {
 
-    local OUT_BODY=""
+    local __TEMPLATE="$1"
+    local __SRC_FILE="$2"
+
+    __OUT_BODY=""
+    __TEMPLATE_CHAIN="$__TEMPLATE $ARROW_DOWN"
     local __INFINITE_RECURSION_COUNTER=0
+
     __recurse_resolve_template () {
         local __INFINITE_RECURSION_COUNTER=$((__INFINITE_RECURSION_COUNTER + 1))
 
@@ -397,20 +423,33 @@ __resolve_template () {
 
         case "$FIRST_LINE" in
             "<!--"*)
-                local PARENT=$(echo "$FIRST_LINE" | awk -F "<!-- INHERITS | -->" '{print $2}') 
-                export BODY=$(echo "$INPUT" | tail -n +2)
-                OUT_BODY=$(envsubst < $PARENT)
-                __recurse_resolve_template "$OUT_BODY"
+                local PARENT=$(echo "$FIRST_LINE" | awk -F '<!-- INHERITS | -->' '{print $2}') 
+                if [ -f "$PARENT" ]; then
+                    __TEMPLATE_CHAIN="$PARENT $ARROW_DOWN$__TEMPLATE_CHAIN"
+                    __copy_implicit_template_css "$PARENT" "$__SRC_FILE"
+                    # Set BODY to child template
+                    export BODY=$(echo "$INPUT" | tail -n +2)
+                    __OUT_BODY="$(envsubst < $PARENT)"
+                    __recurse_resolve_template "$__OUT_BODY"
+                fi
                 ;;
             *)
-                OUT_BODY="$INPUT"
+                __OUT_BODY="$INPUT"
                 return 0
         esac
     }
 
-    __recurse_resolve_template "$(cat $1)"
+    __copy_implicit_template_css "$__TEMPLATE" "$__SRC_FILE"
 
-    [ "$?" -eq 0 ] && __TEMPLATE_BODY="$OUT_BODY" && return 0
+    __recurse_resolve_template "$(cat $__TEMPLATE)"
+
+    __TEMPLATE_CHAIN=$(echo -e "$__TEMPLATE_CHAIN" | head -n -2)
+
+
+    if [ "$?" -eq 0 ]; then
+        __TEMPLATE_BODY="$__OUT_BODY"
+        return 0
+    fi
 
     [ "$?" -eq 1 ] && return 1
 
@@ -430,16 +469,17 @@ __cache_source_file () {
 }
 
 __check_cache () {
+    $([ -z "$CACHE_DIR" ] || [ "$CLI_BYPASS_CACHE" = true ]) && return 1
+
     local INPUT="$1"
     local CACHE_FILE="$(__get_cache_dir)/$INPUT"
 
-    [ ! -f "$CACHE_FILE" ] && return 1
+    $([ ! -f "$CACHE_FILE" ] || [ ! -f $(infer_out_path "$INPUT") ]) && echo "2" && return 1
 
     cmp --silent "$INPUT" "$CACHE_FILE"
 
     return "$?"
 }
-
 
 
 #}}}
@@ -459,9 +499,11 @@ infer_out_path () {
 
     local EXTENSION=$(get_extension "$IN_PATH")
 
+    local OUT_EXTENSION=""
+    [ "$EXTENSION" = "md" ] && OUT_EXTENSION="html" || OUT_EXTENSION="$EXTENSION"
     # Note here "$OUT_DIR" is reffering to the global declared in config.
-    local OUT_PATH_DIR="$OUT_DIR$(dirname ${INPUT#$SRC_DIR})"
-    local OUT_PATH_FILE="$(basename $IN_PATH $EXTENSION)$([ $EXTENSION = "md" ] && echo 'html' || echo $EXTENSION)"
+    local OUT_PATH_DIR=$(dirname "${IN_PATH/$SRC_DIR/$OUT_DIR}")
+    local OUT_PATH_FILE="$(basename $IN_PATH $EXTENSION)$OUT_EXTENSION"
 
     local OUT_PATH="$OUT_PATH_DIR/$OUT_PATH_FILE"
 
@@ -491,76 +533,85 @@ __build_preflight () {
 
 compile_md_file () {
 
+    local __SRC="$1"
+    local __DEST="$2"
 
-    local SRC="$1"
-    local DEST="$2"
+    __check_cache "$__SRC"
 
-    __check_cache "$SRC"
+    [ "$?" -eq 0 ] && local __CACHED=true || local __CACHED=false
 
-    [ "$?" -eq 0 ] && __clog info "No change" "$SRC" && return 0
+    local TEMPLATE_FILE=$(__infer_template_file "$__SRC" "html")
+    local TEMPLATE_FILE_CSS=$(__infer_template_file "$__SRC" "css")
 
-    local TEMPLATE_FILE=$(__infer_template_file "$SRC" "html")
-    local TEMPLATE_FILE_CSS=$(__infer_template_file "$SRC" "css")
+    [ ! -z "$TEMPLATE_FILE_CSS" ] && 
+        local TEMPLATE_FILE_CSS_DEST="$(dirname $__DEST)/$(basename $TEMPLATE_FILE_CSS)"
 
-    local TEMPLATE_FILE_CSS_DEST=""
-
-    [ ! -z "$TEMPLATE_FILE_CSS" ] && TEMPLATE_FILE_CSS_DEST="$(dirname $DEST)/$(basename $TEMPLATE_FILE_CSS)"
-
-    local __FRONTMATTER=$(parse_frontmatter "$SRC")
+    local __FRONTMATTER=$(parse_frontmatter "$__SRC")
     local __FRONTMATTER_NAMES=$(echo "$__FRONTMATTER" |  grep '=*' | sed 's;=.*;;')
 
-    local MD_BODY=$(sed '1 { /^---/ { :a N; /\n---/! ba; d} }' "$SRC")
+    local __MD_BODY=$(sed '1 { /^---/ { :a N; /\n---/! ba; d} }' "$__SRC")
     
     set -a
 
-    [ $SAFE_BODY = false ] && BODY=$(__use_parser_prg "$MD_BODY")
+    [ "$__CACHED" = false ] && [ $SAFE_BODY = false ] && BODY=$(__use_parser_prg "$__MD_BODY")
 
     eval "$__FRONTMATTER"
 
-    [ $SAFE_BODY = true ] && BODY=$(__use_parser_prg "$MD_BODY")
+    [ "$__CACHED" = false ] && [ $SAFE_BODY = true ] && BODY=$(__use_parser_prg "$__MD_BODY")
 
     set +a
+
 
     # If TEMPLATE_FILE was explicitly set in FRONTMATTER, check if css file exists, if so copy it if not already in dest dir
     [ ! -z "$TEMPLATE_FILE" ] && 
         [ -f "$(dirname $TEMPLATE_FILE)/$(basename $TEMPLATE_FILE .html).css" ]  &&
-        TEMPLATE_FILE_CSS="$(dirname $TEMPLATE_FILE)/$(basename $TEMPLATE_FILE .html).css" &&
-        TEMPLATE_FILE_CSS_DEST="$(dirname $DEST)/$(basename $TEMPLATE_FILE_CSS)"
+        local TEMPLATE_FILE_CSS="$(dirname $TEMPLATE_FILE)/$(basename $TEMPLATE_FILE .html).css" &&
+        local TEMPLATE_FILE_CSS_DEST="$(dirname $__DEST)/$(basename $TEMPLATE_FILE_CSS)"
 
-    [ -z "$TEMPLATE_FILE" ] && __clog error "Error: " "Template file does not exist for $SRC" && return 1
+    [ -z "$TEMPLATE_FILE" ] && __clog error "Error: " "Template file does not exist for $__SRC" && return 1
 
     [ ! -f "$TEMPLATE_FILE" ] && __clog error "Error: " "Template file $TEMPLATE_FILE does not exist." && return 1
 
-    local __TEMPLATE_BODY=""
+    __TEMPLATE_BODY=""
 
-    __resolve_template "$TEMPLATE_FILE" || __bail "Circular dependency detected at $TEMPLATE_FILE"
+    __resolve_template "$TEMPLATE_FILE" "$__SRC" || __bail "Circular dependency detected at $TEMPLATE_FILE"
 
-    local __OUT=$(echo "$__TEMPLATE_BODY" | envsubst)
+    if [ "$__CACHED" = false ]; then
 
-    [ -z "$FORMAT_CMD" ] && echo "$__OUT" > "$DEST" || echo "$__OUT" | $FORMAT_CMD > "$DEST"
+        local __OUT=$(echo "$__TEMPLATE_BODY" | envsubst)
+
+        [ -z "$FORMAT_CMD" ] && echo "$__OUT" > "$__DEST" 
+
+        [ ! -z "$FORMAT_CMD" ] &&  echo "$__OUT" | $FORMAT_CMD > "$__DEST" 
+        
+        __clog success "Built" "$__SRC --> $__DEST"
+
+        __clog_verbose info "\tTemplate chain\n       " "$__TEMPLATE_CHAIN"
+
+
+    else
+        __clog info "No changes" "$__SRC"
+    fi
 
     unset "$__FRONTMATTER_NAMES"
 
-    __clog success "Built" "$SRC --> $DEST"
+    [ ! -z "$CACHE_DIR" ] &&  __cache_source_file "$__SRC"
 
-    [ ! -z "$CACHE_DIR" ] &&  __cache_source_file "$SRC"
-
-    [ ! -z "$TEMPLATE_FILE_CSS" ] && 
-        [ -f "$TEMPLATE_FILE_CSS" ] && 
-        ! cmp -s "$TEMPLATE_FILE_CSS" "$TEMPLATE_FILE_CSS_DEST" &&
-        cat "$TEMPLATE_FILE_CSS" > "$TEMPLATE_FILE_CSS_DEST" &&
-        __clog success "Copied" "$TEMPLATE_FILE_CSS --> $TEMPLATE_FILE_CSS_DEST"
+    [ ! -z "$TEMPLATE_FILE_CSS" ] && copy_non_md_file "$TEMPLATE_FILE_CSS" "$TEMPLATE_FILE_CSS_DEST"
 
 }
 
 copy_non_md_file () {
-
     local SRC="$1" 
     local DEST="$2"
-
-    cmp --silent "$SRC" "$DEST" && 
-        __clog info "No change" "$SRC" || 
-        (cp "$SRC" "$DEST" && __clog success "Copied" "$SRC --> $DEST")
+    if [ -f "$DEST" ]; then
+        if ! cmp -s "$SRC" "$DEST"; then
+            cp "$SRC" "$DEST" &&
+                __clog success "Copied" "$SRC --> $DEST"
+        else
+            __clog_verbose "info" "Same file" "$SRC = $DEST"
+        fi
+    fi
 }
 
 
@@ -664,12 +715,13 @@ Options
 
     -h      print this message
     -q      quiet mode ( same as setting QUIET=true)
+    -c      clean mode - bypasses cache
 
 USAGE
 
 }
 
-while getopts ":hq" opt; do
+while getopts ":hqcv" opt; do
   case ${opt} in
     h ) # process option h
         __usage
@@ -677,6 +729,12 @@ while getopts ":hq" opt; do
         ;;
     q )
         readonly CLI_QUIET=true
+        ;;
+    c )
+        readonly CLI_BYPASS_CACHE=true
+        ;;
+    v )
+        readonly CLI_VERBOSE=true
         ;;
   esac
 done
