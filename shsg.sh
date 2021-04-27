@@ -10,10 +10,10 @@ readonly SAFE_BODY=true
 readonly QUIET=false
 
 # Optional
-readonly PARSER_PRG=""
-readonly PARSER_PRG_ARGS=""
-readonly FORMAT_PRG=""
-readonly FORMAT_PRG_ARGS=""
+readonly CACHE_DIR=""
+readonly PARSER_CMD=""
+readonly FORMAT_CMD=""
+readonly SERVE_CMD=""
 
 # Colors
 readonly LOG_DEFAULT_COLOR="\033[0m"
@@ -348,51 +348,28 @@ __bail () {
 }
 
 __check_prg_exists () {
-    local PRG="$1"
+    local PRG="${1%% *}"
     local LABEL="$2"
+    local REQUIRED="$3"
 
-    [ ! -z "$PRG" ] && 
-        ! command -v "$PRG" > /dev/null 2>&1 && 
-        __bail "$LABEL $PRG does not exist"
+    __check () {
+        ! command -v "$1" > /dev/null 2>&1 && 
+        __bail "$2 $1 does not exist"
+    }
+
+    if [ "$REQUIRED" = true ]; then
+        [ -z "$PRG" ] && __bail "$LABEL program is undefined" || __check "$PRG" "$LABEL"
+    else
+        [ ! -z "$PRG"] && __check "$PRG" "$LABEL"
+    fi
+
 }
 
-
-__preflight () {
-    __check_prg_exists "$PARSER_PRG" "Parser"
-    __check_prg_exists "$FORMAT_PRG" "Formatter"
-}
-
-__merge_prg_args () {
-    local PRG="$1"
-    local ARGS="$2"
-    local DEFAULT="$3"
-
-    local CMD=""
-
-    [ -z "$PRG" ] && [ -z "$ARGS"] && CMD="$DEFAULT"
-
-    [ ! -z "$PRG" ] && [ -z "$ARGS" ] && CMD="$PRG"
-
-    [ ! -z "$PRG" ] && [ ! -z "$ARGS" ] && CMD="$PRG $ARGS"
-
-    echo "$CMD"
-}
 
 __use_parser_prg () {
     local INPUT="$1"
 
-    local PARSER_CMD=$(__merge_prg_args "$PARSER_PRG" "$PARSER_PRG_ARGS" 'markdown.bash')
-
-    if [ "$PARSER_CMD" = "markdown.bash" ]; then
-        echo "$(__parse_md $INPUT)"
-    else
-        echo "$INPUT" | $PARSER_CMD
-    fi
-}
-
-__get_format_cmd () {
-
-    echo $(__merge_prg_args "$FORMAT_PRG" "$FORMAT_PRG_ARGS" "cat")
+    [ -z "$PARSER_CMD" ] && __parse_md "$INPUT" || echo "$INPUT" | $PARSER_CMD
 }
 
 __infer_template_file () {
@@ -404,8 +381,66 @@ __infer_template_file () {
     local SRC_RELATIVE_DIRNAME_UNDERSCORED=$(echo "$SRC_RELATIVE_DIRNAME" | sed -e 's/\//_/g')
 
     echo $(find "$TEMPLATE_DIR" -type f -name "$SRC_RELATIVE_DIRNAME_UNDERSCORED.$EXTENSION")
+}
+
+__resolve_template () {
+
+    local OUT_BODY=""
+    local __INFINITE_RECURSION_COUNTER=0
+    __recurse_resolve_template () {
+        local __INFINITE_RECURSION_COUNTER=$((__INFINITE_RECURSION_COUNTER + 1))
+
+        [ "$__INFINITE_RECURSION_COUNTER" -eq 100 ] && return 1
+
+        local INPUT="$1"
+        local FIRST_LINE=$(echo "$INPUT" | head -n 1)
+
+        case "$FIRST_LINE" in
+            "<!--"*)
+                local PARENT=$(echo "$FIRST_LINE" | awk -F "<!-- INHERITS | -->" '{print $2}') 
+                export BODY=$(echo "$INPUT" | tail -n +2)
+                OUT_BODY=$(envsubst < $PARENT)
+                __recurse_resolve_template "$OUT_BODY"
+                ;;
+            *)
+                OUT_BODY="$INPUT"
+                return 0
+        esac
+    }
+
+    __recurse_resolve_template "$(cat $1)"
+
+    [ "$?" -eq 0 ] && __TEMPLATE_BODY="$OUT_BODY" && return 0
+
+    [ "$?" -eq 1 ] && return 1
 
 }
+
+__get_cache_dir () {
+    echo "$CACHE_DIR/${PWD//\//-}"
+}
+
+__cache_source_file () {
+    local INPUT="$1"
+    local OUT="$(__get_cache_dir)/$INPUT"
+
+    [ ! -d $(dirname "$OUT") ] && mkdir -p $(dirname "$OUT")
+
+    cp "$INPUT" "$OUT"
+}
+
+__check_cache () {
+    local INPUT="$1"
+    local CACHE_FILE="$(__get_cache_dir)/$INPUT"
+
+    [ ! -f "$CACHE_FILE" ] && return 1
+
+    cmp --silent "$INPUT" "$CACHE_FILE"
+
+    return "$?"
+}
+
+
 
 #}}}
 
@@ -437,13 +472,32 @@ infer_out_path () {
 
 #### Build ####{{{
 
-compile_template_file () {
+__build_preflight () {
+    __check_prg_exists "$PARSER_CMD" "Parser"
+    __check_prg_exists "$FORMAT_CMD" "Formatter"
 
-    __preflight
+    if [ ! -z "$CACHE_DIR" ]; then
+        [ ! -d "$CACHE_DIR" ] && mkdir "$CACHE_DIR" && __clog success "Created $CACHE_DIR"_
+
+        local THIS_CACHE_DIR=$(__get_cache_dir)
+
+        [ ! -z "$THIS_CACHE_DIR" ] && 
+            [ ! -d "$THIS_CACHE_DIR" ] && 
+            mkdir "$THIS_CACHE_DIR" && 
+            __clog success "Created $THIS_CACHE_DIR"
+    fi
+
+}
+
+compile_md_file () {
 
 
     local SRC="$1"
     local DEST="$2"
+
+    __check_cache "$SRC"
+
+    [ "$?" -eq 0 ] && __clog info "No change" "$SRC" && return 0
 
     local TEMPLATE_FILE=$(__infer_template_file "$SRC" "html")
     local TEMPLATE_FILE_CSS=$(__infer_template_file "$SRC" "css")
@@ -477,13 +531,19 @@ compile_template_file () {
 
     [ ! -f "$TEMPLATE_FILE" ] && __clog error "Error: " "Template file $TEMPLATE_FILE does not exist." && return 1
 
-    local FORMAT_CMD="$(__get_format_cmd)"
+    local __TEMPLATE_BODY=""
 
-    envsubst < "$TEMPLATE_FILE" | $FORMAT_CMD > "$DEST"
+    __resolve_template "$TEMPLATE_FILE" || __bail "Circular dependency detected at $TEMPLATE_FILE"
+
+    local __OUT=$(echo "$__TEMPLATE_BODY" | envsubst)
+
+    [ -z "$FORMAT_CMD" ] && echo "$__OUT" > "$DEST" || echo "$__OUT" | $FORMAT_CMD > "$DEST"
 
     unset "$__FRONTMATTER_NAMES"
 
     __clog success "Built" "$SRC --> $DEST"
+
+    [ ! -z "$CACHE_DIR" ] &&  __cache_source_file "$SRC"
 
     [ ! -z "$TEMPLATE_FILE_CSS" ] && 
         [ -f "$TEMPLATE_FILE_CSS" ] && 
@@ -493,16 +553,19 @@ compile_template_file () {
 
 }
 
-copy_non_template_file () {
+copy_non_md_file () {
 
     local SRC="$1" 
     local DEST="$2"
 
-    cp "$SRC" "$DEST" && __clog success "Copied" "$SRC --> $DEST"
+    cmp --silent "$SRC" "$DEST" && 
+        __clog info "No change" "$SRC" || 
+        (cp "$SRC" "$DEST" && __clog success "Copied" "$SRC --> $DEST")
 }
 
 
 build_file () {
+
     local INPUT="$1"
 
     local OUTPUT=$(infer_out_path "$INPUT")
@@ -511,14 +574,16 @@ build_file () {
 
     [ ! -d $(dirname "$OUTPUT") ] && mkdir $(dirname "$OUTPUT") && __clog success "Created" $(dirname "$OUTPUT")
 
-    [ "$EXTENSION" = "md" ] && compile_template_file "$INPUT" "$OUTPUT" && return $?
+    [ "$EXTENSION" = "md" ] && compile_md_file "$INPUT" "$OUTPUT" && return $?
 
-    [ "$EXTENSION" != "md" ]  && copy_non_template_file "$INPUT" "$OUTPUT" && return $?
+    [ "$EXTENSION" != "md" ]  && copy_non_md_file "$INPUT" "$OUTPUT" && return $?
 
 }
 
 
 build () {
+
+    __build_preflight
 
     local START_MS=$(date +%s%N | cut -b1-13)
 
@@ -562,24 +627,38 @@ init () {
     init_dir $SRC_DIR
     init_dir $OUT_DIR
     init_dir $TEMPLATE_DIR
-    return 0
+}
+
+#}}}
+
+#### Serve ####{{{
+
+__serve_preflight () {
+    __check_prg_exists "$SERVE_CMD" "Serve" true
+}
+
+serve () {
+    __serve_preflight
+
+    __clog "info" "Starting" "serve command '$SERVE_CMD' \n"
+
+    $SERVE_CMD
 }
 
 #}}}
 
 #### CLI ####{{{
 
-while getopts ":hq" opt; do
-  case ${opt} in
-    h ) # process option h
-        cat << USAGE
+__usage () {
+    cat << USAGE
 
-${0} [COMMAND] [OPTIONS]
+${0} [OPTIONS] COMMAND
 
 Commands
 
-    NONE    build all files in SRC_DIR --> OUT_DIR
+    build   build all files in SRC_DIR --> OUT_DIR
     init    create SRC_DIR, OUT_DIR, and TEMPLATE_DIR
+    serve   run SERVE_CMD
 
 Options
 
@@ -587,18 +666,42 @@ Options
     -q      quiet mode ( same as setting QUIET=true)
 
 USAGE
-    exit 0
+
+}
+
+while getopts ":hq" opt; do
+  case ${opt} in
+    h ) # process option h
+        __usage
+        exit 0
         ;;
     q )
         readonly CLI_QUIET=true
         ;;
   esac
 done
+
 shift "$((OPTIND - 1))"
 
-[ -z "$1" ] && build
+case "$1" in 
+    "build")
+        build
+        ;;
+    "init")
+        init
+        ;;
+    "serve")
+        serve
+        ;;
+    "")
+        __usage
+        ;;
+    *)
+        __clog error "Unknown command" "$1"
+        __usage
+        ;;
+esac
 
-[ "$1" = "init" ] && init
 #}}}
 
 #### License ####{{{
@@ -618,7 +721,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 License for shsg.sh
 
-Copyright 2021 Jake Adler
+Copyright (c) 2021 Jake Adler
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 

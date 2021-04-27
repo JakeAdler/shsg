@@ -1,6 +1,6 @@
-# shsg.sh
+# shsg.sh (shell site generator)
 
-`shsg.sh` is a shell script for generating simple, static websites.
+`shsg.sh` is a shell script for generating static websites from markdown.
 
 ## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) | [Credit](#Credit) ]
 
@@ -38,41 +38,30 @@ After installing `shsg.sh`, open it in a text editor and make any necessary chan
 | `TEMPLATE_DIR`    | where template files are located                | "templates" | yes        |
 | `SAFE_BODY`       | markdown body protected or can be overriden     | true        | yes        |
 | `QUIET`           | quiet mode                                      | false       | yes        |
-| `FORMAT_PRG`      | command that will format outputted html files   | NONE        | no         |
-| `FORMAT_PRG_ARGS` | arguments/flags passed to `FORMAT_PRG`          | NONE        | no         |
-| `PARSER_PRG`      | command that will parse markdown into html      | NONE        | no         |
-| `PARSER_PRG_ARGS` | arguments/flags passed to `PARSER_PRG`          | NONE        | no         |
+| `CACHE_DIR`       | where cached source files will be located       | NONE        | no         |
+| `PARSER_CMD`      | command that will parse markdown into html      | NONE        | no         |
+| `FORMAT_CMD`      | command that will format outputted html files   | NONE        | no         |
+| `SERVE_CMD`       | command that will run on `./shsg.sh serve`      | NONE        | no         |
 
-#### Example `FORMAT_PRG` configurations
+#### Example configuration
 
-[Prettier](https://prettier.io/)
+[Pandoc](https://pandoc.org/) with [prettier](https://prettier.io/) and [live-server](https://github.com/tapio/live-server)
+
 ```sh
-FORMAT_PRG="prettier"
-FORMAT_PRG_ARGS="--stdin-filepath $TEMPLATE_OUT_PATH --parser html"
-```
-
-[Tidy](https://www.html-tidy.org/)
-```
-FORMAT_PRG="tidy"
-FORMAT_PRG_ARGS="-iq --tidy-mark no"
-```
-
-#### Example `PARSER_PRG` configurations
-
-[Pandoc](https://pandoc.org/)
-```sh
-PARSER_PRG="pandoc"
-PARSER_PRG_ARGS=""
-```
-
-[Marked](https://github.com/markedjs/marked)
-```sh
-PARSER_PRG="marked"
-PARSER_PRG_ARGS="--gfm" # For using github flavored markdown
+readonly SRC_DIR="src"
+readonly OUT_DIR="public"
+readonly TEMPLATE_DIR="templates"
+readonly SAFE_BODY=true
+readonly QUIET=false
+readonly CACHE_DIR="$XDG_CACHE_HOME/shsg"
+readonly PARSER_CMD="pandoc"
+readonly FORMAT_CMD="prettier --parser html"
+readonly SERVE_CMD="live-server ./public"
 ```
 
 ## Usage
 
+- [CLI](#cli)
 - [Initialization](#initialization)
 - [Writing markdown](#writing-markdown)
     - [Frontmatter](#frontmatter)
@@ -82,6 +71,25 @@ PARSER_PRG_ARGS="--gfm" # For using github flavored markdown
     - [Setting template explicitly](#setting-template-explicitly)
     - [Setting template implicitly](#setting-template-implicitly)
     - [Templates and CSS](#templates-and-css)
+    - [Template inheritance](#template-inheritance)
+
+## CLI
+
+
+```
+./shsg.sh [COMMAND] [OPTIONS]
+
+Commands
+
+    build   build all files in SRC_DIR --> OUT_DIR
+    init    create SRC_DIR, OUT_DIR, and TEMPLATE_DIR
+    serve   run SERVE_CMD
+
+Options
+
+    -h      print this message
+    -q      quiet mode ( same as setting QUIET=true)
+```
 
 ## Initialization
 
@@ -261,6 +269,58 @@ All files in `src/blog`, `post-1.md` will have it's template implicitly set to `
 Typically, template files will correspond to a directory in `$SRC_DIR/$(basename TEMPLATE_FILE .html)` (e.g. `templates/blog` corresponds to `src/blog`). 
 
 To target a nested directory (e.g `src/blog/special-posts/`), replace directory seperators (`/`) after `SRC_DIR` with underscores `_` (e.g. `templates/blog_special-posts.html`).
+
+### Template inheritance
+
+Templates can be inherit one another by adding the following HTML comment as the **first line** of a template file.
+
+```
+<!-- INHERITS path/to/template.html -->
+```
+
+The path should be relative from the root project directory, e.g.:
+
+```
+<!-- INHERITS templates/parent.html -->
+
+```
+
+When a template inherits another, the `BODY` section of the inherited template is replaced with the inheritee template.
+
+For example:
+
+`templates/html-doc.html`
+```html
+<html>
+    <body>
+        ${BODY}
+    </body>
+<html>
+```
+
+`templates/blog.html`
+```html
+<!-- INHERITS templates/html-doc.html -->
+<div>
+    <h1>${TITLE}</h1>
+    <div>
+        ${BODY}
+    </div>
+<div>
+```
+Would produce the template
+```html
+<html>
+    <body>
+        <div>
+            <h1>${TITLE}</h1>
+            <div>
+                ${BODY}
+            </div>
+        <div>
+    </body>
+<html>
+```
 
 ### Templates and CSS
 
