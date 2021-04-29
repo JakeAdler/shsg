@@ -17,6 +17,7 @@ readonly CACHE_DIR=""
 readonly PARSER_CMD=""
 readonly FORMAT_CMD=""
 readonly SERVE_CMD="live-server ./public"
+readonly BASE_TEMPLATE="templates/__html_doc.html"
 
 # Colors
 readonly LOG_DEFAULT_COLOR="\033[0m"
@@ -484,38 +485,50 @@ __resolve_template() {
 
 		[ "$__INFINITE_RECURSION_COUNTER" -eq 20 ] && __clog error "\tInfinite recursion detected" && return 1
 
-        local __CHILD_TEMPLATE="$1"
-        local __CHILD_TEMPLATE_CONTENTS="$(cat $__CHILD_TEMPLATE)"
-
-	    __copy_implicit_template_css "$__CHILD_TEMPLATE" "$__SRC_FILE"
+        local __CHILD_TEMPLATE_CONTENTS="$1"
 
         local __TEMPLATE_FM=$(parse_frontmatter "$__CHILD_TEMPLATE_CONTENTS")
 
-        if [ ! -z "$__TEMPLATE_FM" ]; then
-            set -a && eval "$__TEMPLATE_FM" && set +a
-            if [ ! -z "$INHERITS" ] && [ -f "$INHERITS" ]; then
-                [ "$__CHILD_TEMPLATE" = "$INHERITS" ] && __clog error "\tA template cannot inherit itself" && return 1
+        [ ! -z "$__TEMPLATE_FM" ] && set -a && eval "$__TEMPLATE_FM" && set +a
 
-                __clog_verbose info '' "$ARROW_DOWN$INHERITS"
+        local __TEMPLATE_HTML=$(echo "$__CHILD_TEMPLATE_CONTENTS" | sed '1 { /^<\!\-\-FM/ { :a N; /\-\->/! ba; d} }' | envsubst)
 
-                export BODY=$(echo "$__CHILD_TEMPLATE_CONTENTS" | sed '1 { /^<\!\-\-FM/ { :a N; /\-\->/! ba; d} }')
+        # NOTE: INHERITS set by __TEMPLATE_FM
+        if [ ! -z "$INHERITS" ] && [ -f "$INHERITS" ]; then
 
+            [ "$__CHILD_TEMPLATE" = "$INHERITS" ] && __clog error "\tA template cannot inherit itself" && return 1
 
-                __OUT_BODY="$(envsubst < $INHERITS)"
+        	__copy_implicit_template_css "$INHERITS" "$__SRC_FILE"
 
+            __clog_verbose info '' "$ARROW_DOWN$INHERITS"
 
-                __recurse_resolve_template "$INHERITS"
-            fi
-        fi 
+            __clog_verbose info "FOOBAR \n \n" ""
+            export BODY="$__TEMPLATE_HTML"
 
-        [ -z "$__OUT_BODY" ] && __OUT_BODY="$__CHILD_TEMPLATE_CONTENTS"
+            __OUT_BODY="$(envsubst < $INHERITS)"
+
+            unset $(__get_var_names "$__TEMPLATE_FM")
+
+            __recurse_resolve_template "$__OUT_BODY"
+        fi
+
+        [ -z "$__OUT_BODY" ] && __OUT_BODY="$__TEMPLATE_HTML"
 
         [ ! -z "$__TEMPLATE_FM" ] && unset $(__get_var_names "$__TEMPLATE_FM")
 
 		export BODY="$__ORIGINAL_BODY"
 	}
 
-	__recurse_resolve_template "$TEMPLATE_FILE" 
+	__copy_implicit_template_css "$TEMPLATE_FILE" "$__SRC_FILE"
+    __recurse_resolve_template "$(cat $TEMPLATE_FILE)"
+
+    if [ ! -z "$BASE_TEMPLATE" ] && [ "$TEMPLATE_FILE" != "$BASE_TEMPLATE" ]; then
+        export BODY="$__OUT_BODY"
+        __OUT_BODY=$(envsubst < "$BASE_TEMPLATE")
+        export BODY="$__ORIGINAL_BODY"
+        __clog_verbose info '' "$ARROW_DOWN$BASE_TEMPLATE"
+        __copy_implicit_template_css "$BASE_TEMPLATE" "$__SRC_FILE"
+    fi
 
     echo "$__OUT_BODY"
 }
@@ -525,7 +538,7 @@ __get_cache_dir() {
 }
 
 __get_var_names () {
-    echo "$1" | grep -i '^[a-z].*=' | sed 's/=.[a-z].*//i'
+    echo "$1" | grep -i '^[a-z].*=' | grep -v "^export *" | sed 's/=.[a-z].*//i'
 }
 
 __cache_source_file() {
