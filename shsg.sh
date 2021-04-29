@@ -485,11 +485,11 @@ __resolve_template() {
 		[ "$__INFINITE_RECURSION_COUNTER" -eq 20 ] && __clog error "\tInfinite recursion detected" && return 1
 
         local __CHILD_TEMPLATE="$1"
-        local __CHILD_TEMPLATE_CONTENTS=$(cat "$__CHILD_TEMPLATE")
+        local __CHILD_TEMPLATE_CONTENTS="$(cat $__CHILD_TEMPLATE)"
 
 	    __copy_implicit_template_css "$__CHILD_TEMPLATE" "$__SRC_FILE"
 
-        local __TEMPLATE_FM=$(parse_frontmatter "$__CHILD_TEMPLATE_CONTENTS"); echo $?
+        local __TEMPLATE_FM=$(parse_frontmatter "$__CHILD_TEMPLATE_CONTENTS")
 
         if [ ! -z "$__TEMPLATE_FM" ]; then
             set -a && eval "$__TEMPLATE_FM" && set +a
@@ -500,22 +500,24 @@ __resolve_template() {
 
                 export BODY=$(echo "$__CHILD_TEMPLATE_CONTENTS" | sed '1 { /^<\!\-\-FM/ { :a N; /\-\->/! ba; d} }')
 
-                __OUT_BODY=$(envsubst < "$INHERITS")
+
+                __OUT_BODY="$(envsubst < $INHERITS)"
+
 
                 __recurse_resolve_template "$INHERITS"
-            else
-                __OUT_BODY="$__CHILD_TEMPLATE_CONTENTS"
             fi
-        else
-            __OUT_BODY="$__CHILD_TEMPLATE_CONTENTS"
         fi 
-        
+
+        [ -z "$__OUT_BODY" ] && __OUT_BODY="$__CHILD_TEMPLATE_CONTENTS"
+
         [ ! -z "$__TEMPLATE_FM" ] && unset $(__get_var_names "$__TEMPLATE_FM")
 
 		export BODY="$__ORIGINAL_BODY"
 	}
 
-	__recurse_resolve_template "$TEMPLATE_FILE" && echo "$__OUT_BODY"
+	__recurse_resolve_template "$TEMPLATE_FILE" 
+
+    echo "$__OUT_BODY"
 }
 
 __get_cache_dir() {
@@ -559,12 +561,10 @@ parse_frontmatter() {
     [ -f "$__INPUT" ] && local __INPUT="$(cat $__INPUT)"
 
     local __MD_FM=$(echo "$__INPUT" | sed -n '/---/,/---/{/---/b;/---/b;p}')
-    [ ! -z "$__MD_FM" ] && echo "$__MD_FM" && return 0
+    [ ! -z "$__MD_FM" ] && echo "$__MD_FM" 
     
     local __HTML_FM=$(echo "$__INPUT" | sed -n '/<\!\-\-FM/,/\-\->/{/<\!\-\-FM/b;/\-\->/b;p}')
-    [ ! -z "$__HTML_FM" ] && echo "$__HTML_FM" && return 0
-
-    return 0
+    [ ! -z "$__HTML_FM" ] && echo "$__HTML_FM"
 }
 
 parse_body () {
