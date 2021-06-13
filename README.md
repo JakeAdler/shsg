@@ -6,12 +6,13 @@
 
 ## Installation
 
-First, create and cd into the directory where you'd like to store your project e.g. `~/my-site/`
+### Before installing
+
+Create and cd into the directory where you'd like to store your project e.g. `~/my-site/`
 
 ```console
 mkdir my-site && cd my-site
 ```
-
 ### Install the script 
 
 ```console
@@ -31,32 +32,25 @@ chmod +x ./shsg.sh
 
 After installing `shsg.sh`, open it in a text editor and make any necessary changes.
 
-| name              | description                                     | default     | required   |
-|-------------------|-------------------------------------------------|-------------|------------|
-| `SRC_DIR`         | where source files are located                  | "src"       | yes        |
-| `OUT_DIR`         | where output files are located                  | "public"    | yes        |
-| `TEMPLATE_DIR`    | where template files are located                | "templates" | yes        |
-| `SAFE_BODY`       | markdown body protected or can be overriden     | true        | yes        |
-| `QUIET`           | quiet mode                                      | false       | yes        |
-| `CACHE_DIR`       | where cached source files will be located       | NONE        | no         |
-| `PARSER_CMD`      | command that will parse markdown into html      | NONE        | no         |
-| `FORMAT_CMD`      | command that will format outputted html files   | NONE        | no         |
-| `SERVE_CMD`       | command that will run on `./shsg.sh serve`      | NONE        | no         |
+| name                 | description                                           | default     | required |
+|----------------------|-------------------------------------------------------|-------------|----------|
+| `SRC_DIR`            | where source files are located                        | "src"       | yes      |
+| `OUT_DIR`            | where output files are located                        | "public"    | yes      |
+| `TEMPLATE_DIR`       | where template files are located                      | "templates" | yes      |
+| `QUIET`              | quiet mode                                            | false       | yes      |
+| `CLEAR_BEFORE_BUILD` | clear terminal before building.                       | false       | yes      |
+| `CACHE_DIR`          | where cached source files will be located             | NONE        | no       |
+| `PARSER_CMD`         | command that will parse markdown into html            | NONE        | no       |
+| `FORMAT_CMD`         | command that will format outputted html files         | NONE        | no       |
+| `BASE_TEMPLATE`      | template from which all other will inherit            | NONE        | no       |
+| `IGNORE_FILE`        | file containing list of paths `shsg.sh` should ignore | NONE        | no       |
 
 #### Example configuration
 
-[Pandoc](https://pandoc.org/) with [prettier](https://prettier.io/) and [live-server](https://github.com/tapio/live-server)
+[Pandoc](https://pandoc.org/)
 
 ```sh
-readonly SRC_DIR="src"
-readonly OUT_DIR="public"
-readonly TEMPLATE_DIR="templates"
-readonly SAFE_BODY=true
-readonly QUIET=false
-readonly CACHE_DIR="$XDG_CACHE_HOME/shsg"
-readonly PARSER_CMD="pandoc"
-readonly FORMAT_CMD="prettier --parser html"
-readonly SERVE_CMD="live-server ./public"
+readonly PARSER_CMD="pandoc --wrap=preserve -f gfm -t html"
 ```
 
 ## Usage
@@ -80,20 +74,22 @@ readonly SERVE_CMD="live-server ./public"
 ./shsg.sh [COMMAND] [OPTIONS]
 
 Commands
-
-    build   build all files in SRC_DIR --> OUT_DIR
-    init    create SRC_DIR, OUT_DIR, and TEMPLATE_DIR
-    serve   run SERVE_CMD
+    init				create SRC_DIR, OUT_DIR, and TEMPLATE_DIR
+    serve				run SERVE_CMD
+    build				build all files in SRC_DIR
+	build-file [FILE]	build FILE
 
 Options
-
     -h      print this message
-    -q      quiet mode ( same as setting QUIET=true)
+    -q      quiet mode - silence output
+    -v      verbose mode - print output about all files
+    -c      clean mode - remove everything in OUT_DIR before build.
+
 ```
 
 ## Initialization
 
-Run `./shsg.sh init`, this will simply create the `SRC_DIR`, `OUT_DIR`, and `TEMPLATE_DIR` directories.
+Run `./shsg.sh init`, this will simply create the `SRC_DIR`, `OUT_DIR`, and `TEMPLATE_DIR` directories, if they do not already exist.
 
 Your directory structure should now look like this:
 
@@ -104,11 +100,87 @@ Your directory structure should now look like this:
 └── shsg.sh
 ```
 
-## Writing markdown
+## Templates
 
-`shsg.sh` comes bundled with a stripped down and modified version of [markdown.bash](https://github.com/chadbraunduin/markdown.bash) to parse markdown, however you can [bring your own parser](#example-parser_prg-configurations).
+Templates are HTML files inside of `TEMPLATE_DIR` which contain shell style variable references, for example:
 
-If using the bundled markdown parser, see [caveats](#markdownbash-caveats).
+```html
+<div>
+    ${BODY}
+</div>
+```
+
+Templates are only useful when combined with source files, though. We can target source files in 2 ways: **implicitly** and **explicitly**. 
+
+### Targeting source files implicitly
+
+Implicit targeting is useful for targeting whole directories, for example:
+
+```
+├── src
+│   ├── blog
+│   │   ├── index.html
+│   │   ├── post-1.md
+│   │   └── post-2.md
+│   └── index.html
+└── templates
+    └── blog.html
+
+```
+
+The template file `template/blog.html` would target `src/blog/index.html`, `src/blog/post-1.md`, and `src/blog/post-2.md`.
+
+```
+templates/[NAME].html ---> src/[NAME]/*
+```
+
+
+### Targeting source files explicitly
+
+If we wanted to use a different template for `blog/index.html`, we could do that by creating a template that explicitly targets that file.
+
+```
+├── src
+│   ├── blog
+│   │   ├── index.html
+│   │   ├── post-1.md
+│   │   └── post-2.md
+│   └── index.html
+└── templates
+    ├── blog
+    │   └── __index.html
+    └── blog.html
+
+```
+
+Since `templates/blog/__index.html` is prefixed with 2 underscores, it explicitly targets the file `src/blog/index.html`. 
+
+```
+templates/[__NAME].html --> src/[NAME].(html|md)
+```
+
+### Index templates
+
+Notice how the template file structure is a bit ugly? There is a file `blog.html` and a directory name `blog`. We can clean this up a bit by moving `templates/blog.html` --> `templates/blog/index.html`.
+
+```
+├── src
+│   ├── blog
+│   │   ├── index.html
+│   │   ├── post-1.md
+│   │   └── post-2.md
+│   └── index.html
+└── templates
+    └── blog
+        ├── __index.html
+        └── index.html
+```
+
+Now we have 2 files in `templates/blog`: `__index.html` which explicitly targets `src/blog/index.html`, and `index.html` which servers as the default template and will target all other files in `src/blog`.
+
+### Templates and CSS
+
+Template files can have a CSS file with the same basename (e.g. `templates/home.html` and `templates/home.css`) that will be automatically copied once per directory that the template is used. This means that a file which explicitly sets it's template and is not inside the implicit template directory will have the CSS file copied to it's directory.
 
 ### Frontmatter
 
@@ -127,7 +199,7 @@ TITLE="My first post"
 Some great content
 ```
 
-Template file `templates/blog.html`
+Template file `templates/blog/index.html`
 ```html
 <div>
     <h1>${TITLE}</h1>
@@ -146,129 +218,35 @@ Will produce `public/blog/post-1.html`
 </div>
 ```
 
-There are a few values which can be overriden in frontmatter that will effect how the file gets built:
+#### HTML frontmatter
 
-| Name                | Description                                                       |
-|---------------------|-------------------------------------------------------------------|
-| `TEMPLATE_FILE`     | Relative path (e.g. `templates/blog.html`) to template HTML file. |
-| `TEMPLATE_FILE_CSS` | Relative path (e.g. `templates/blog.css` to template CSS file.    |
-| `BODY`              | Body of the markdown file (only if `SAFE_BODY` is false)          |
+In `shsg.sh`, HTML files can have frontmatter too:
 
-### [markdown.bash](https://github.com/chadbraunduin/markdown.bash) caveats
-
-#### Multi-line blocks (``` | ~~~)
-
-**Wont work:**
-~~~md
-Some JavaScript code
+`src/blog/post-1.html`
 ```
-function add (a, b) {
-    return a + b
-}
+<!--FM
+TITLE="My first post"
+-->
+
+<h1>This is my blog</h1>
+<p>Some great content</p>
 ```
-~~~
+There are a few values which can be set in frontmatter that will effect how the file gets built:
 
-**Will work:**
-~~~md
-Some JavaScript code
-<pre><code>
-function add (a, b) {
-    return a + b
-}
-</code></pre>
-~~~
 
-#### Nested lists 
+#### Frontmatter build variables
 
-**Will work**
-```md
-- List
-- Item
-```
+| Name                | Description                                                                 |
+|---------------------|-----------------------------------------------------------------------------|
+| `TEMPLATE_FILE`     | Relative path from root (e.g. `templates/blog.html`) to template HTML file. |
+| `TEMPLATE_FILE_CSS` | Relative path from root(e.g. `templates/blog.css` to template CSS file.     |
+| `BODY`              | Body of the markdown file (value is only read if `SAFE_BODY` is false)      |
 
-**Wont work**
+All internal variables in `shsg.sh` that are not supposed to be overriden are prefixed with `__`. Because of how shell scripting works, any value in the script can be overriden, to avoid doing that, avoid prefixing your own variables in frontmatter with `__`.
 
-```md
-- List
-- Item
-    - Child
+### Other files
 
-```
-
-**Will work**
-```md
-<ul>
-    <li> List </li>
-    <li> Item </li>
-    <ul>
-        <li> Child </li>
-    </ul>
-</ul>
-```
-
-## Other files
-
-All non-markdown files will be copied to the public directory, including HTML and css files.
-
-## Using templates
-
-Templates are HTML files which contain shell variables, these shell variables will be replaced by [frontmatter](#frontmatter) values, or in some special cases, by values set by `shsg.sh`.
-
-Values set by `shsg.sh`:
-
-| Name   | Description                                |
-|--------|--------------------------------------------|
-| `BODY` | Where the transpiled HTML will be inserted |
-
-### Setting template explicitly
-
-Templates can be explicitly set using [frontmatter](#frontmatter).
-
-For example, using the following directory structure:
-
-```console
-├── public
-├── src
-│   └── about_me.md
-├── templates
-│   └── layout.html
-└── shsg.sh
-```
-
-You can make `src/about_me.md.` use `templates/layout.html` by setting `TEMPLATE_FILE="templates/layout.html"` in the frontmatter of `src/about_me.md`.
-
-`src/about_me.md`
-```md
----
-TEMPLATE_FILE="templates/layout.html"
----
-
-Lorem ipsum dolor sit amet.
-```
-
-### Setting template implicitly
-
-For each file in `TEMPLATE_DIR`, `shsg.sh` will look for a directory with a corresponding directory name, `templates/foo.html` would implicitly be used for all markdown file in `src/foo/*`.
-
-For example, using the following directory structure:
-
-```console
-├── public
-├── src
-│   └── blog
-│       └── post-1.md
-├── templates
-│   └── blog.html
-└── shsg.sh
-```
-
-All files in `src/blog`, `post-1.md` will have it's template implicitly set to `templates/blog.html`.
-
-#### Implicitly targeting nested directories
-
-Typically, template files will correspond to a directory in `$SRC_DIR/$(basename TEMPLATE_FILE .html)` (e.g. `templates/blog` corresponds to `src/blog`). 
-
-To target a nested directory (e.g `src/blog/special-posts/`), replace directory seperators (`/`) after `SRC_DIR` with underscores `_` (e.g. `templates/blog_special-posts.html`).
+All non-markdown files will be copied to the public directory, unless they are listed in `IGNORE_FILE`.
 
 ### Template inheritance
 
@@ -285,7 +263,9 @@ The path should be relative from the root project directory, e.g.:
 
 ```
 
-When a template inherits another, the `BODY` section of the inherited template is replaced with the inheritee template.
+Note: this line should **not** be incuded in a HTML frontmatter block.
+
+When a template inherits another, the `BODY` section of the parent template is replaced with the child template.
 
 For example:
 
@@ -322,11 +302,6 @@ Would produce the template
 <html>
 ```
 
-### Templates and CSS
+### Note on `BASE_TEMPLATE`
 
-Template files can have a CSS file with the same basename (e.g. `templates/home.html` and `templates/home.css`) that will be automatically copied once per directory that the template is used. This means that a file which explicitly sets it's template and is not inside the implicit template directory will have the CSS file copied to it's directory.
-
-## Credit
-
-- [chadbraunduin](https://github.com/chadbraunduin) for creating [markdown.bash](https://github.com/chadbraunduin/markdown.bash), which is used in the `parse_md` function.
-- [cfenollosa](https://github.com/cfenollosa) for creating [bashblog](https://github.com/cfenollosa/bashblog), which served as an inspiration for this project.
+In the above example, `templates/html-doc.html` only exists to be inherited, there are not any files it is targeting specifically. Therefore it is a good candidate for `BASE_TEMPLATE`. Do note that **all templates** will inherit this template.

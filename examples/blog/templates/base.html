@@ -1,0 +1,27 @@
+<!DOCTYPE html lang="en">
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/a11y-dark.min.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css">
+        <link rel="stylesheet" href="./base.css"/>
+        ${HEAD}
+        <title>My website| ${PAGE_TITLE}</title>
+    </head>
+    <body class="container">
+        <div class="center">
+            ${BODY}
+        </div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+        <script>
+            (function() {
+                hljs.highlightAll();
+            })()
+        </script>
+        ${SCRIPTS}
+    </body>
+</html>
+

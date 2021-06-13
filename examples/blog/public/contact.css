@@ -1,0 +1,19 @@
+.form {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+input {
+    width: 50%;
+}
+
+footer {
+    display: flex;
+    justify-content: center;
+}
+
+#showEmail {
+    cursor: pointer;
+}

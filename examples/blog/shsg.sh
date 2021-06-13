@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #### Config ####{{{
-
+. "./globals.sh"
 # Required
 readonly SRC_DIR="src"
 readonly OUT_DIR="public"
@@ -10,9 +10,9 @@ readonly QUIET=false
 readonly CLEAR_BEFORE_BUILD=false
 
 # Optional
-readonly PARSER_CMD=""
+readonly PARSER_CMD="pandoc --wrap=preserve -f gfm -t html"
 readonly FORMAT_CMD=""
-readonly BASE_TEMPLATE=""
+readonly BASE_TEMPLATE="templates/base.html"
 readonly IGNORE_FILE=""
 
 # Colors

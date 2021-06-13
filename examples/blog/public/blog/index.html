@@ -1,0 +1,74 @@
+<!DOCTYPE html lang="en">
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/a11y-dark.min.css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/dark.css">
+        <link rel="stylesheet" href="./base.css"/>
+        <link rel='stylesheet' href='__index.css'/>
+        <title>My website| Blog</title>
+    </head>
+    <body class="container">
+        <div class="center">
+            <main>
+    <header class="go-back-header">
+    <a href="/index.html">Home</a>
+</header>
+    <div>
+        <button id="reset-filter" style="display: none">Reset filter</button>
+    </div>
+            
+    <div class="blog-link" data-tags='programming:linux'>
+        <a href="post-1.html"><h3>Another good post</h3></a>
+        <p>4/28/2021 <mark class='tag' data-tag='programming'>programming</mark> <mark class='tag' data-tag='linux'>linux</mark> </p>
+    </div>
+    <div class="blog-link" data-tags='other tag:linux'>
+        <a href="post-2.html"><h3>Another good post</h3></a>
+        <p>4/28/2021 <mark class='tag' data-tag='other tag'>other tag</mark> <mark class='tag' data-tag='linux'>linux</mark> </p>
+    </div>
+    <script>
+    window.onload = function () {
+        const allTagsEls = document.getElementsByClassName('tag')
+        const allPreviews = document.querySelectorAll('[data-tags]');
+
+        const resetBtn = document.getElementById("reset-filter")
+
+        resetBtn.onclick = function () {
+            this.style.display = "none"
+            for (const prev of allPreviews) {
+                prev.hidden = false
+            }
+        }
+
+        resetBtn.addEventListener("click", () => {
+        })
+
+        console.dir(resetBtn)
+
+        for (const tag of allTagsEls) {
+            tag.onclick = function () { 
+                resetBtn.style.display = "block"
+                for (const prev of allPreviews) {
+                    if (!prev.getAttribute('data-tags').split(':').includes(this.dataset.tag)) {
+                        prev.hidden = true
+                    }
+                }
+            }
+        }
+
+    }
+    </script>
+</main>
+        </div>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+        <script>
+            (function() {
+                hljs.highlightAll();
+            })()
+        </script>
+        
+    </body>
+</html>

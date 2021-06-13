@@ -1,0 +1,43 @@
+<!--FM
+PAGE_TITLE="Blog"
+-->
+<main>
+    ${__GO_BACK_HEADER}
+    <div>
+        <button id="reset-filter" style="display: none">Reset filter</button>
+    </div>
+    ${BLOG_LINKS}
+    <script>
+    window.onload = function () {
+        const allTagsEls = document.getElementsByClassName('tag')
+        const allPreviews = document.querySelectorAll('[data-tags]');
+
+        const resetBtn = document.getElementById("reset-filter")
+
+        resetBtn.onclick = function () {
+            this.style.display = "none"
+            for (const prev of allPreviews) {
+                prev.hidden = false
+            }
+        }
+
+        resetBtn.addEventListener("click", () => {
+        })
+
+        console.dir(resetBtn)
+
+        for (const tag of allTagsEls) {
+            tag.onclick = function () { 
+                resetBtn.style.display = "block"
+                for (const prev of allPreviews) {
+                    if (!prev.getAttribute('data-tags').split(':').includes(this.dataset.tag)) {
+                        prev.hidden = true
+                    }
+                }
+            }
+        }
+
+    }
+    </script>
+</main>
+

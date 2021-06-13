@@ -1,0 +1,28 @@
+<!--FM
+__TOC=$(
+    local LINKS=$(grep -E '^#{2,5}' "$SRC" | sed 's/^[# ]* //')
+
+    IFS=$'\n'
+    for LINK in $LINKS; do
+        echo "<a class'toc-link' href='#$(kebab_case $LINK)'>$LINK</a>"
+    done
+)
+
+[ "$NO_TOC" != true ] && [ ! -z "$__TOC" ] && 
+    TOC="<div class='toc'>$__TOC</div>"
+    
+HEAD="<link rel='stylesheet' href='./index.css' />"
+PAGE_TITLE="$BLOG_TITLE"
+-->
+<main>
+    <div>
+        ${__GO_BACK_HEADER}
+    </div>
+    <div>
+        <h2>${BLOG_TITLE}</h2>
+        <h5>Written ${BLOG_DATE} ${BLOG_LINKS}</h5>
+        <hr/>
+        ${BODY}
+    </div>
+</main>
+
