@@ -2,7 +2,7 @@
 
 `shsg.sh` is a shell script for generating static websites from markdown.
 
-## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) | [Credit](#Credit) ]
+## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) ]
 
 ## Installation
 
@@ -55,19 +55,7 @@ readonly PARSER_CMD="pandoc --wrap=preserve -f gfm -t html"
 
 ## Usage
 
-- [CLI](#cli)
-- [Initialization](#initialization)
-- [Writing markdown](#writing-markdown)
-    - [Frontmatter](#frontmatter)
-    - [Markdown syntax caveats](#markdown-syntax-caveats)
-- [Other files](#other-files)
-- [Using Templates](#using-templates)
-    - [Setting template explicitly](#setting-template-explicitly)
-    - [Setting template implicitly](#setting-template-implicitly)
-    - [Templates and CSS](#templates-and-css)
-    - [Template inheritance](#template-inheritance)
-
-## CLI
+### CLI
 
 
 ```
@@ -87,7 +75,7 @@ Options
 
 ```
 
-## Initialization
+### Initialization
 
 Run `./shsg.sh init`, this will simply create the `SRC_DIR`, `OUT_DIR`, and `TEMPLATE_DIR` directories, if they do not already exist.
 
@@ -100,7 +88,7 @@ Your directory structure should now look like this:
 └── shsg.sh
 ```
 
-## Templates
+### Templates
 
 Templates are HTML files inside of `TEMPLATE_DIR` which contain shell style variable references, for example:
 
