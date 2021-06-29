@@ -167,15 +167,15 @@ __resolve_template() {
 
 		set +a
 
-		local __RECURSIVE_BODY=$(envsubst <<<"$__RECURSIVE_TEMPLATE")
-
 		if [ ! -z "$INHERITS" ]; then
+			local __RECURSIVE_BODY=$(envsubst <"$__RECURSIVE_TEMPLATE")
+
 			__clog_verbose info '' "$ARROW_DOWN$INHERITS"
 			__copy_implicit_template_css "$INHERITS" "$__SRC_FILE"
 
 			__recursive_resolve "$INHERITS" "$__RECURSIVE_BODY"
 		else
-			if [ ! -z "$BASE_TEMPLATE" ]; then
+			if [ ! -z "$BASE_TEMPLATE" ] && [ "$__TEMPLATE_FILE" != "$BASE_TEMPLATE" ]; then
 
 				local __RECURSIVE_BODY=$(envsubst <"$BASE_TEMPLATE")
 
@@ -298,14 +298,15 @@ build_source_file() {
 
 	set +a
 
-	local __COMPILED_MD=$(envsubst <<<$(parse_body "$__TEMPLATE_FILE"))
+	local __INITAL_BODY=$(envsubst <"$__TEMPLATE_FILE")
 
 	__clog_verbose info "\tTemplate Chain"
 	__clog_verbose info "" "\t$__TEMPLATE_FILE"
 
 	__copy_implicit_template_css "$__TEMPLATE_FILE" "$SRC"
 
-	local __OUT=$(__resolve_template "$__TEMPLATE_FILE" "$__COMPILED_MD" "$SRC")
+
+	local __OUT=$(__resolve_template "$__TEMPLATE_FILE" "$__INITAL_BODY" "$SRC")
 
 	[ -z "$__OUT" ] && __bail "Could not build $SRC"
 
@@ -437,7 +438,7 @@ init() {
 #### CLI ####{{{
 
 __usage() {
-	cat <<EOF
+	cat <<USAGE
 
 ${0} [OPTIONS] COMMAND
 
@@ -453,7 +454,7 @@ Options
     -q      quiet mode - silence output
     -v      verbose mode - print output about all files
     -c      clean mode - remove everything in OUT_DIR before build.
-EOF
+USAGE
 
 }
 

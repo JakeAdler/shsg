@@ -4,6 +4,8 @@
 
 ## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) ]
 
+Check the `examples` directory in this repository for example projects, there is a [follow-along example on my blog](https://jakeadler.me/blog/posts/post-1.html) for the `blog` example.
+
 ## Installation
 
 ### Before installing
