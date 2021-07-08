@@ -23,7 +23,7 @@ readonly LOG_SUCCESS_COLOR="\033[1;32m"
 readonly LOG_ALT_COLOR="\033[1;35m"
 readonly ARROW_DOWN="\t${LOG_INFO_COLOR}↓${LOG_DEFAULT_COLOR}\n\t"
 
-#}}}[]
+#}}}
 
 #### Utility functions (internal) ####{{{
 
@@ -86,11 +86,15 @@ __infer_template_file() {
 	local __SRC_FiLE_PATH="$1"
 	local __EXTENSION="$2"
 
-	local __RELATIVE_DIRNAME=$(dirname ${__SRC_FiLE_PATH/"$SRC_DIR"\//})
+	local __RELATIVE_DIRNAME=$(dirname ${__SRC_FiLE_PATH/$SRC_DIR\//})
 	local __BASENAME=$(basename ${__SRC_FiLE_PATH%.*})
 
+	[ "$__RELATIVE_DIRNAME" = "." ] && 
+		__RELATIVE_DIRNAME="" || 
+		__RELATIVE_DIRNAME="$__RELATIVE_DIRNAME/"
+
 	# Check for an exact match (e.g.: src/blog/post-1.md --> template/blog/__post-1.html)
-	local __EXACT_MATCH="$TEMPLATE_DIR/$__RELATIVE_DIRNAME/__$__BASENAME.$__EXTENSION"
+	local __EXACT_MATCH="${TEMPLATE_DIR}/${__RELATIVE_DIRNAME}__${__BASENAME}.${__EXTENSION}"
 	[ -f "$__EXACT_MATCH" ] &&
 		echo "$__EXACT_MATCH" &&
 		return 0
@@ -100,15 +104,18 @@ __infer_template_file() {
 	# src/blog/post-1.md --> templates/blog.html || templates/blog/index.html
 	# src/blog/special/post-1/.md --> src/blog/special.html
 	local __DEEPEST_MATCH=""
-
+	local __COLLECTOR=""
 	IFS="/"
 	for __DIR in $__RELATIVE_DIRNAME; do
-		[ -f "$TEMPLATE_DIR/$__DIR.$__EXTENSION" ] &&
-			local __DEEPEST_MATCH="$TEMPLATE_DIR/$__DIR.$__EXTENSION"
+		local __COLLECTOR="$__COLLECTOR/$__DIR"
 
-		[ -f "$TEMPLATE_DIR/$__DIR/index.$__EXTENSION" ] &&
-			local __DEEPEST_MATCH="$TEMPLATE_DIR/$__DIR/index.$__EXTENSION"
+		[ -f "${TEMPLATE_DIR}${__COLLECTOR}.${__EXTENSION}" ] &&
+			local __DEEPEST_MATCH="${TEMPLATE_DIR}$__COLLECTOR.$__EXTENSION"
+
+		[ -f "$TEMPLATE_DIR/${__COLLECTOR}/index.$__EXTENSION" ] &&
+			local __DEEPEST_MATCH="${TEMPLATE_DIR}${__COLLECTOR}/index.$__EXTENSION"
 	done
+
 	IFS="$DEFAULT_IFS"
 
 	[ ! -z "$__DEEPEST_MATCH" ] &&
@@ -298,7 +305,8 @@ build_source_file() {
 
 	set +a
 
-	local __INITAL_BODY=$(envsubst <"$__TEMPLATE_FILE")
+	local __TEMPLATE_BODY=$(parse_body "$__TEMPLATE_FILE");
+	local __INITAL_BODY=$(envsubst <<<"$__TEMPLATE_BODY")
 
 	__clog_verbose info "\tTemplate Chain"
 	__clog_verbose info "" "\t$__TEMPLATE_FILE"
@@ -352,7 +360,7 @@ build_file() {
 			__clog info "Nope"
 		fi
 
-		[ ! -d "$(dirname $OUTPUT)" ] && mkdir "$(dirname $OUTPUT)" && __clog success "Created" "$(dirname $OUTPUT)"
+		[ ! -d "$(dirname $OUTPUT)" ] && mkdir -p "$(dirname $OUTPUT)" && __clog success "Created" "$(dirname $OUTPUT)"
 
 		[ "$EXTENSION" = "md" ] && __check_prg_exists "$PARSER_CMD" "Markdown parser "
 
@@ -369,7 +377,7 @@ build_file() {
 build() {
 
 	[ "$CLEAR_BEFORE_BUILD" = true ] && [ "$CLI_QUIET" != true ] && clear && printf '\e[3J' && tput cup 0 0
-	[ "$CLI_CLEAN" = true ] && rm -rf "$OUT_DIR/*" && __clog alt "Removed " "$OUT_DIR/*\n"
+	[ "$CLI_CLEAN" = true ] && rm -rf "$OUT_DIR" && mkdir "$OUT_DIR" && __clog alt "Removed " "$OUT_DIR/*\n"
 
 	__build_preflight
 
