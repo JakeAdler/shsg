@@ -4,7 +4,7 @@
 
 ## [ [Installation](#installation) | [Configuration](#configuration) | [Usage](#usage) ]
 
-Check the `examples` directory in this repository for example projects, there is a [follow-along example on my blog](https://jakeadler.me/blog/posts/post-1.html) for the `blog` example.
+Check the `examples` directory in this repository for example projects, there is a [follow-along example on my blog](https://jakeadler.me/blog/posts/2021-05-27.html) for the `blog` example.
 
 ## Installation
 
@@ -67,7 +67,7 @@ Commands
     init				create SRC_DIR, OUT_DIR, and TEMPLATE_DIR
     serve				run SERVE_CMD
     build				build all files in SRC_DIR
-	build-file [FILE]	build FILE
+    build-file [FILE]	build FILE
 
 Options
     -h      print this message
