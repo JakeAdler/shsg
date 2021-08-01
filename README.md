@@ -16,11 +16,7 @@ mkdir my-site && cd my-site
 ### Install the script 
 
 ```console
-# wget
-wget https://raw.githubusercontent.com/JakeAdler/shsg/master/shsg.sh
-
-# curl
-curl -LJO https://raw.githubusercontent.com/JakeAdler/shsg/master/shsg.sh
+curl -SLO https://raw.githubusercontent.com/JakeAdler/shsg/master/shsg.sh
 ```
 
 ### Give correct permssions
